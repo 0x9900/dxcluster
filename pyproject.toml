@@ -1,0 +1,41 @@
+[build-system]
+  requires = ["setuptools"]
+  build-backend = "setuptools.build_meta"
+
+[project]
+  name = "dxcluster"
+  readme = "README.md"
+  description = "Gather spot data from DXCC cluster network."
+  license = {file = "LICENSE.md"}
+  authors = [
+    { name = "Fred C." },
+  ]
+  classifiers = [
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: Telecommunications",
+    "License :: OSI Approved :: BSD License",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+  ]
+  requires-python = ">=3.10"
+  dependencies = [
+    "PyYAML",
+  ]
+  dynamic = ["version"]
+
+[project.urls]
+  Documentation = "https://github.com/0x9900/dxcluster/"
+  Source = "https://github.com/0x9900/dxcluster"
+  Tracker = "https://github.com/0x9900/dxcluster/issues"
+
+[project.scripts]
+  dxcluster = "dxcluster:main"
+
+[tool.setuptools.dynamic]
+  version = { attr = "dxcluster.__version__" }
+
+[tool.setuptools.packages.find]
+  include = ["dxcluster*"]
