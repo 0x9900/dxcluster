@@ -25,7 +25,7 @@ from datetime import datetime
 from itertools import cycle
 from queue import Queue, Full
 from telnetlib import Telnet
-from threading import Event, Thread
+from threading import Event, Lock, Thread
 from threading import enumerate as thread_enum
 
 import sqlite3
@@ -378,7 +378,7 @@ class Cluster(Thread):
       if record:
         self.queue.put(['dxspot', record])
     except Exception as err:
-      LOG.critical("process_spot: you need to deal with this error: %s", err)
+      LOG.exeption("process_spot: you need to deal with this error: %s", err)
 
   def process_wwv(self, line):
     try:
@@ -386,7 +386,7 @@ class Cluster(Thread):
       if record:
         self.queue.put(['wwv', record])
     except Exception as err:
-      LOG.critical("wwv: you need to deal with this error: %s", err)
+      LOG.exeption("wwv: you need to deal with this error: %s", err)
 
   def process_message(self, line):
     try:
@@ -394,9 +394,10 @@ class Cluster(Thread):
       if record:
         self.queue.put(['messages', record])
     except Exception as err:
-      LOG.critical("message: you need to deal with this error: %s", err)
+      LOG.exeption("message: you need to deal with this error: %s", err)
 
   def run(self):
+    trace(self.name, self.host, self.port, 'Start')
     try:
       LOG.info(f"Server: %s:%d", self.host, self.port)
       self.telnet = Telnet(self.host, self.port, timeout=self._timeout)
@@ -408,7 +409,6 @@ class Cluster(Thread):
 
     counter = 200000
     while not self._stop.is_set() and counter:
-      counter -= 1
       try:
         line = self.telnet.read_until(b'\n', self.timeout)
         if not line:
@@ -429,6 +429,12 @@ class Cluster(Thread):
           LOG.warning("Counter: %d, Line: %s", counter, line)
       except EOFError:
         break
+
+      counter -= 1
+      if counter % 10000 == 0:
+        trace(self.name, self.host, self.port, f'Counter: {counter}')
+
+    trace(self.name, self.host, self.port, 'Shutdown')
     LOG.info('Thread finished closing telnet')
     self.telnet.close()
 
@@ -486,9 +492,20 @@ class SaveRecords(Thread):
           try:
             self.write(conn, table, records)
           except Exception as err:
-            LOG.critical('Critical error %s', err)
+            LOG.exeption('Critical error %s', err)
 
     LOG.error("SaveRecord thread stopped")
+
+
+def trace(name, host, port, msg):
+  if not hasattr(trace, '_lock'):
+    trace._lock = Lock()
+
+  trace._lock.acquire()
+  now = datetime.now().isoformat()
+  with open('/tmp/dxcluster-trace.txt', 'a', encoding='utf-8') as tfd:
+    tfd.write(f'{name}, {host}, {port}, {now}, {msg}\n')
+  trace._lock.release()
 
 
 def main():
