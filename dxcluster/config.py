@@ -1,4 +1,9 @@
 #
+# BSD 3-Clause License
+#
+# Copyright (c) 2023, Fred W6BSD
+# All rights reserved.
+#
 #
 
 import os
