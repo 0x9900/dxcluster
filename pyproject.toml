@@ -33,6 +33,7 @@
 
 [project.scripts]
   dxcluster = "dxcluster:main"
+  purge_cluster = "dxcluster.purge_cluster:main"
 
 [tool.setuptools.dynamic]
   version = { attr = "dxcluster.__version__" }

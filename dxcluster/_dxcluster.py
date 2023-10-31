@@ -29,11 +29,12 @@ from threading import Event, Thread
 from threading import enumerate as thread_enum
 
 import sqlite3
-import yaml
 
 from dxcluster import adapters
 from dxcluster.DXEntity import DXCC
+from dxcluster.config import Config
 
+TELNET_TIMEOUT = 27
 FIELDS = ['DE', 'FREQUENCY', 'DX', 'MESSAGE', 'T_SIG', 'DE_CONT',
           'TO_CONT', 'DE_ITUZONE', 'TO_ITUZONE', 'DE_CQZONE',
           'TO_CQZONE', 'MODE', 'SIGNAL', 'BAND', 'TIME']
@@ -80,7 +81,6 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE UNIQUE INDEX IF NOT EXISTS messages_idx_unique ON messages (de, time);
 """
 
-TELNET_TIMEOUT = 17
 DETECT_TYPES = sqlite3.PARSE_DECLTYPES
 
 QUERIES = {}
@@ -152,63 +152,73 @@ def get_band(freq):
   return 0
 
 
-def spider_options(_, telnet, email):
+def dxspider_options(telnet, email):
   commands = (
-    (b'set/dx/filter\n', b'DX filter.*\n'),
-    (b'set/wwv on\n', b'set/wwv on\n'),
-    (b'set/wwv/output on\n', b'WWV output set.*\n'),
-    (f'set/station/email {email}\n'.encode(), b'Email address set.*\n'),
+    b'set/dx filter\n',
+    b'set/wwv on\n',
+    b'set/wwv output on\n',
+    f'set/email {email}\n'.encode(),
   )
-  for cmd, reply_ex in commands:
+  for cmd in commands:
     telnet.write(cmd)
-    LOG.info('%s - Command: %s', telnet.host, cmd.decode('UTF-8').rstrip())
+    LOG.debug('%s - Command: %s', telnet.host, cmd.decode('UTF-8').rstrip())
+    time.sleep(.25)
+
+def ar_options(telnet, _):
+  commands = (
+    b'set/dx/filter',
+    b'set/wwv/output on',
+  )
+  for cmd in commands:
+    telnet.write(cmd)
+    LOG.debug('%s - Command: %s', telnet.host, cmd.decode('UTF-8').rstrip())
+    time.sleep(.25)
 
 
-def cc_options(call, telnet, _):
-  prompt = str.encode(f'{call} de .*\n')
+def cc_options(telnet, _):
   commands = (b'SET/WWV\n', b'SET/FT4\n', b'SET/FT8\n',  b'SET/PSK\n', b'SET/RTTY\n',
               b'SET/SKIMMER\n')
   for cmd in commands:
     telnet.write(cmd)
-    LOG.info('%s - Command: %s', telnet.host, cmd.decode('UTF-8').rstrip())
+    LOG.debug('%s - Command: %s', telnet.host, cmd.decode('UTF-8').rstrip())
+    time.sleep(.25)
 
-def login(call, telnet, email):
-  expect_exp = [
-    b'Running CC Cluster.*\n',
-    b'AR-Cluster.*\n',
-    b'running DXSpider.*\n',
-  ]
+def login(call, telnet, email, timeout):
+  clusters = {
+    "running cc cluster": cc_options,
+    "ar-cluster": ar_options,
+    "running dxspider": dxspider_options,
+  }
+  re_spider = re.compile(rf'({"|".join(clusters.keys())})', re.IGNORECASE)
+  buffer = []
+  expect_exp = [b'your call:', b'login:']
+
+  code, _, match = telnet.expect(expect_exp, timeout)
+  if code == -1:
+    raise OSError('No login prompt found') from None
+  buffer.append(match)
+  telnet.write(str.encode(f'{call}\n'))
   try:
     for _ in range(5):
-      code, _,  match = telnet.expect(expect_exp, TELNET_TIMEOUT)
-      if code == 0:
-        set_options = cc_options
-      elif code == 1:
-        set_options = spider_options
-      elif code == 2:
-        raise OSError('DX Spider cluster')
-      break
-  except socket.timeout:
-    raise OSError('Connection timeout') from None
+      buffer.append(telnet.read_very_eager())
+      time.sleep(0.25)
   except EOFError as err:
-    raise OSError(err) from None
+    raise OSError(f'{err}: {buffer}')
 
-  expect_exp = [
-    b'.*enter your call.*\n',
-    b'.*enter your amateur radio callsign.*\n'
-  ]
-  prompt = [s.encode('utf-8') for s in  (f'{call} de .*\n', 'not a valid callsign')]
-  telnet.write(str.encode(f'{call}\n'))
-  code, match, b = telnet.expect(prompt, TELNET_TIMEOUT)
-  if code == -1:
-    raise OSError('Login error, this server looks like a non valid dx cluster')
-  elif code == 0:
-    match = match.group().decode('UTF-8')
-    LOG.info('%s - Reply: %s', telnet.host, match.strip())
-    set_options(call, telnet, email)
-  elif code == 1:
-    LOG.error('Login error %s %s', call, match.group())
-    raise OSError('Login error, invalid login')
+  buffer = b'\n'.join(buffer).decode('UTF-8', 'replace')
+  if 'invalid callsign' in buffer:
+    raise OSError('invalid callsign')
+
+  match = re_spider.search(buffer)
+  if not match:
+    raise OSError('Unknown cluster type')
+  match_str = match.group().lower()
+  try:
+    LOG.info('%s:%d running %s', telnet.host, telnet.port, match_str)
+    set_options = clusters[match_str]
+  except KeyError:
+    raise OSError('Unknown cluster type')
+  set_options(telnet, email)
 
 
 def parse_spot(line):
@@ -272,7 +282,7 @@ def parse_spot(line):
   try:
     t_sig = now.replace(hour=int(t_sig[:2]), minute=int(t_sig[2:4]), second=0, microsecond=0)
   except ValueError:
-    t_sig = now.replace(minute=0, second=0, micrsecond=0)
+    t_sig = now.replace(minute=0, second=0, microsecond=0)
 
   fields.extend([
     t_sig,
@@ -357,6 +367,7 @@ class Cluster(Thread):
     self.call = call
     self.email = email
     self._stop = Event()
+    self._timeout = TELNET_TIMEOUT
 
   def stop(self):
     self._stop.set()
@@ -388,23 +399,21 @@ class Cluster(Thread):
   def run(self):
     try:
       LOG.info(f"Server: %s:%d", self.host, self.port)
-      self.telnet = Telnet(self.host, self.port, timeout=TELNET_TIMEOUT)
-      login(self.call, self.telnet, self.email)
+      self.telnet = Telnet(self.host, self.port, timeout=self._timeout)
+      login(self.call, self.telnet, self.email, self.timeout)
       LOG.info(f"Sucessful login into %s:%d", self.host, self.port)
-    except (OSError, TimeoutError, UnboundLocalError) as err:
+    except (EOFError, OSError, TimeoutError, UnboundLocalError) as err:
       LOG.error(err)
       return
 
-    counter = 0
-    while not self._stop.is_set():
+    counter = 200000
+    while not self._stop.is_set() and counter:
+      counter -= 1
       try:
-        line = self.telnet.read_until(b'\n', TELNET_TIMEOUT)
+        line = self.telnet.read_until(b'\n', self.timeout)
         if not line:
           LOG.warning('Nothing read from: %s in %d seconds disconnecting',
-                      self.host,  TELNET_TIMEOUT)
-          break
-        counter += 1
-        if counter > 200000:
+                      self.host,  self._timeout)
           break
         line = line.decode('UTF-8', 'replace').rstrip()
         if line.startswith('DX de'):
@@ -417,10 +426,19 @@ class Cluster(Thread):
           # Not processed yet
           pass
         else:
-          LOG.warning(line)
+          LOG.warning("Counter: %d, Line: %s", counter, line)
       except EOFError:
         break
-    LOG.info('Thread finished')
+    LOG.info('Thread finished closing telnet')
+    self.telnet.close()
+
+    @property
+    def timeout(self):
+      return self._timeout
+
+    @timeout.setter
+    def timeout(self, tm_out):
+      self._timeout = tm_out
 
 
 class SaveRecords(Thread):
@@ -436,20 +454,20 @@ class SaveRecords(Thread):
   def running(self):
     return not self._stop.is_set()
 
-  @staticmethod
-  def write(conn, table, records):
+  def write(self, conn, table, records):
     command = QUERIES[table]
     with conn:
       cursor = conn.cursor()
       while True:
         try:
           cursor.executemany(command, records)
-          LOG.debug("Row Count: %d, data len: %d", cursor.rowcount, len(records))
+          LOG.debug("Table: %s, Data: %3d, row count: %3d: duplicates: %d",
+                    table, len(records), cursor.rowcount, len(records) - cursor.rowcount)
           break
         except sqlite3.OperationalError as err:
-          LOG.warning("Write error: %s, Queue size: %s", err, self.queue.qsize())
+          LOG.warning("Write error: %s, table: %s,  Queue len: %d",
+                      err, table, self.queue.qsize())
           time.sleep(1)
-
 
   def run(self):
     with connect_db(self.db_name) as conn:
@@ -466,66 +484,11 @@ class SaveRecords(Thread):
 
         for table, records in data.items():
           try:
-            SaveRecords.write(conn, table, records)
+            self.write(conn, table, records)
           except Exception as err:
             LOG.critical('Critical error %s', err)
 
-
-    LOG.error("SaveRecord thread exit")
-
-class Config:
-  DIRS = ['.', '~/.local']
-  _instance = None
-  config_data = None
-  def __new__(cls, *args, **kwargs):
-    if not cls._instance:
-      cls._instance = super(Config, cls).__new__(cls)
-      cls._instance.config_data = None
-    return cls._instance
-
-  def __init__(self):
-    if not self.config_data:
-      self.config_data = Config.read_config()
-
-  @staticmethod
-  def read_config():
-    filename = 'dxcluster.yaml'
-    for path in [os.path.expanduser(p) for p in Config.DIRS]:
-      full_path = os.path.join(path, filename)
-      try:
-        with open(full_path, 'r', encoding="utf-8") as cfg:
-          return yaml.safe_load(cfg)
-      except FileNotFoundError:
-        pass
-    raise FileNotFoundError('No config file found')
-
-  @property
-  def call(self):
-    return self.config_data['call'].upper()
-
-  @property
-  def db_name(self):
-    return self.config_data['db_name']
-
-  @property
-  def nb_threads(self):
-    return self.config_data.get('nb_threads', 2)
-
-  @property
-  def telnet_timeout(self):
-    return self.config_data.get('telnet_timeout', 60)
-
-  @property
-  def servers(self):
-    return self.config_data['servers']
-
-  @property
-  def queue_size(self):
-    return self.config_data.get('queue_size', 512)
-
-  @property
-  def email(self):
-    return self.config_data.get('email', f'{self.call}@arrl.org')
+    LOG.error("SaveRecord thread stopped")
 
 
 def main():
@@ -540,7 +503,6 @@ def main():
 
   def _sig_handler(_signum, _frame):
     if _signum == signal.SIGHUP:
-      LOG.setLevel(logging.INFO)
       LOG.setLevel(log_levels.__next__())
       LOG.warning('SIGHUP received, switching to %s', logging._levelToName[LOG.level])
     elif _signum == signal.SIGINFO:
@@ -573,10 +535,11 @@ def main():
     if len(thread_list) >= config.nb_threads:
       time.sleep(1)
       continue
-    name, port = next_server()
-    th_cluster = Cluster(name, port, queue, config.call, config.email)
+    name, host, port = next_server()
+    th_cluster = Cluster(host, port, queue, config.call, config.email)
     th_cluster.name = name
     th_cluster.daemon = True
+    th_cluster.timeout = config.telnet_timeout
     th_cluster.start()
 
   # stopping all the telnet threads

@@ -1,3 +1,3 @@
 __version__ = "0.0.1"
 
-from dxcluster.dxcluster import *
+from dxcluster._dxcluster import *
