@@ -95,6 +95,11 @@ QUERIES['messages'] = """
   INSERT OR IGNORE INTO messages (de, time, message, timestamp) VALUES (?, ?, ?, ?)
 """
 
+if sys.platform == 'linux':
+  SIGINFO = signal.SIGUSR1
+else:
+  SIGINFO = signal.SIGINFO
+
 if os.isatty(sys.stdout.fileno()):
   LOG_FORMAT = '%(asctime)s - %(threadName)s %(lineno)d %(levelname)s - %(message)s'
 else:
@@ -522,7 +527,7 @@ def main():
     if _signum == signal.SIGHUP:
       LOG.setLevel(log_levels.__next__())
       LOG.warning('SIGHUP received, switching to %s', logging._levelToName[LOG.level])
-    elif _signum == signal.SIGINFO:
+    elif _signum == SIGINFO:
       cache_info = parse_spot.dxcc.get_prefix.cache_info() # ugly but it works.
       rate = 100 * cache_info.hits / (cache_info.misses + cache_info.hits)
       LOG.info("DXEntities cache %s -> %.2f%%", cache_info, rate)
@@ -541,7 +546,7 @@ def main():
   s_thread.start()
 
   LOG.info('Installing signal handlers')
-  for sig in (signal.SIGHUP, signal.SIGINFO, signal.SIGINT,
+  for sig in (signal.SIGHUP, SIGINFO, signal.SIGINT,
               signal.SIGQUIT, signal.SIGTERM):
     signal.signal(sig, _sig_handler)
 
