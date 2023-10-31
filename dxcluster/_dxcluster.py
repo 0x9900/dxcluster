@@ -383,7 +383,7 @@ class Cluster(Thread):
       if record:
         self.queue.put(['dxspot', record])
     except Exception as err:
-      LOG.exeption("process_spot: you need to deal with this error: %s", err)
+      LOG.exception("process_spot: you need to deal with this error: %s", err)
 
   def process_wwv(self, line):
     try:
@@ -391,7 +391,7 @@ class Cluster(Thread):
       if record:
         self.queue.put(['wwv', record])
     except Exception as err:
-      LOG.exeption("wwv: you need to deal with this error: %s", err)
+      LOG.exception("wwv: you need to deal with this error: %s", err)
 
   def process_message(self, line):
     try:
@@ -399,7 +399,7 @@ class Cluster(Thread):
       if record:
         self.queue.put(['messages', record])
     except Exception as err:
-      LOG.exeption("message: you need to deal with this error: %s", err)
+      LOG.exception("message: you need to deal with this error: %s", err)
 
   def run(self):
     trace(self.name, self.host, self.port, 'Start')
@@ -497,7 +497,7 @@ class SaveRecords(Thread):
           try:
             self.write(conn, table, records)
           except Exception as err:
-            LOG.exeption('Critical error %s', err)
+            LOG.exception('Critical error %s', err)
 
     LOG.error("SaveRecord thread stopped")
 
