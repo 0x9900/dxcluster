@@ -242,6 +242,8 @@ def parse_spot(line):
       r'^(?P<mode>FT[48]|CW|RTTY|PSK[\d]*)\s+(?P<db>[+-]?\ ?\d+).*'
     ).match
 
+  if not line:
+    return None
   elem = parse_spot.splitter(line)[2:]
 
   try:
@@ -528,11 +530,14 @@ def main():
       LOG.setLevel(log_levels.__next__())
       LOG.warning('SIGHUP received, switching to %s', logging._levelToName[LOG.level])
     elif _signum == SIGINFO:
-      cache_info = parse_spot.dxcc.get_prefix.cache_info() # ugly but it works.
-      rate = 100 * cache_info.hits / (cache_info.misses + cache_info.hits)
-      LOG.info("DXEntities cache %s -> %.2f%%", cache_info, rate)
       thread_list = [t for t in thread_enum() if isinstance(t, Cluster)]
       LOG.info('Clusters: %s', ', '.join(t.name for t in thread_list))
+      try:
+        cache_info = parse_spot.dxcc.get_prefix.cache_info() # ugly but it works.
+        rate = 100 * cache_info.hits / (cache_info.misses + cache_info.hits)
+        LOG.info("DXEntities cache %s -> %.2f%%", cache_info, rate)
+      except AttributeError:
+        LOG.info("The cache hasn't been initialized yet")
     elif _signum == signal.SIGINT:
       LOG.critical('Signal ^C received')
       s_thread.stop()
