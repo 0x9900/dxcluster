@@ -15,7 +15,6 @@ import os
 import random
 import re
 import signal
-import socket
 import sys
 import time
 
@@ -23,7 +22,7 @@ from collections import defaultdict
 from collections import namedtuple
 from datetime import datetime
 from itertools import cycle
-from queue import Queue, Full
+from queue import Queue
 from telnetlib import Telnet
 from threading import Event, Lock, Thread
 from threading import enumerate as thread_enum
@@ -34,6 +33,7 @@ from dxcluster import adapters
 from dxcluster.DXEntity import DXCC
 from dxcluster.config import Config
 
+TELNET_RETRY = 3
 TELNET_TIMEOUT = 27
 FIELDS = ['DE', 'FREQUENCY', 'DX', 'MESSAGE', 'T_SIG', 'DE_CONT',
           'TO_CONT', 'DE_ITUZONE', 'TO_ITUZONE', 'DE_CQZONE',
@@ -221,8 +221,8 @@ def login(call, telnet, email, timeout):
   try:
     LOG.info('%s:%d running %s', telnet.host, telnet.port, match_str)
     set_options = clusters[match_str]
-  except KeyError:
-    raise OSError('Unknown cluster type')
+  except KeyError as exp:
+    raise OSError('Unknown cluster type') from exp
   set_options(telnet, email)
 
 
@@ -244,9 +244,9 @@ def parse_spot(line):
 
   if not line:
     return None
-  elem = parse_spot.splitter(line)[2:]
 
   try:
+    elem = parse_spot.splitter(line)[2:]
     fields = [
       elem[0].strip('-#'),
       float(elem[1]),
@@ -312,7 +312,7 @@ def parse_wwv(line):
   match = decoder.match(line)
   if not match:
     return None
-  mach = match.groupdict()
+  match = match.groupdict()
   fields = [
     int(match['SFI']),
     int(match['A']),
@@ -374,7 +374,8 @@ class Cluster(Thread):
     self.call = call
     self.email = email
     self._stop = Event()
-    self._timeout = TELNET_TIMEOUT
+    self.timeout = TELNET_TIMEOUT
+    self.telnet = None
 
   def stop(self):
     self._stop.set()
@@ -406,22 +407,25 @@ class Cluster(Thread):
   def run(self):
     trace(self.name, self.host, self.port, 'Start')
     try:
-      LOG.info(f"Server: %s:%d", self.host, self.port)
-      self.telnet = Telnet(self.host, self.port, timeout=self._timeout)
+      LOG.info("Server: %s:%d", self.host, self.port)
+      self.telnet = Telnet(self.host, self.port, timeout=self.timeout)
       login(self.call, self.telnet, self.email, self.timeout)
-      LOG.info(f"Sucessful login into %s:%d", self.host, self.port)
+      LOG.info("Sucessful login into %s:%d", self.host, self.port)
     except (EOFError, OSError, TimeoutError, UnboundLocalError) as err:
       LOG.error(err)
       return
 
-    counter = 200000
-    while not self._stop.is_set() and counter:
+    retry = TELNET_RETRY
+    while not self._stop.is_set() and retry:
       try:
         line = self.telnet.read_until(b'\n', self.timeout)
         if not line:
-          LOG.warning('Nothing read from: %s in %d seconds disconnecting',
-                      self.host,  self._timeout)
-          break
+          LOG.warning('Nothing read from: %s retry: %d', self.host, 1 + TELNET_RETRY - retry)
+          trace(self.name, self.host, self.port, f'retry: {retry}')
+          retry -= 1
+          continue
+
+        retry = TELNET_RETRY
         line = line.decode('UTF-8', 'replace').rstrip()
         if line.startswith('DX de'):
           self.process_spot(line)
@@ -433,25 +437,14 @@ class Cluster(Thread):
           # Not processed yet
           pass
         else:
-          LOG.warning("Counter: %d, Line: %s", counter, line)
+          LOG.debug("retry: %d, Line: %s", retry, line)
       except EOFError:
         break
 
-      counter -= 1
-      if counter % 10000 == 0:
-        trace(self.name, self.host, self.port, f'Counter: {counter}')
 
     trace(self.name, self.host, self.port, 'Shutdown')
     LOG.info('Thread finished closing telnet')
     self.telnet.close()
-
-    @property
-    def timeout(self):
-      return self._timeout
-
-    @timeout.setter
-    def timeout(self, tm_out):
-      self._timeout = tm_out
 
 
 class SaveRecords(Thread):
@@ -484,13 +477,11 @@ class SaveRecords(Thread):
 
   def run(self):
     with connect_db(self.db_name) as conn:
-      cursor = conn.cursor()
       while self.running():
         data = defaultdict(list)
         while self.queue.qsize():
           table, record = self.queue.get()
           data[table].append(record.as_list())
-
         if not data:
           time.sleep(0.5)
           continue
@@ -506,13 +497,16 @@ class SaveRecords(Thread):
 
 def trace(name, host, port, msg):
   if not hasattr(trace, '_lock'):
-    trace._lock = Lock()
+    trace.lock = Lock()
 
-  trace._lock.acquire()
-  now = datetime.now().isoformat()
-  with open('/tmp/dxcluster-trace.txt', 'a', encoding='utf-8') as tfd:
-    tfd.write(f'{name}, {host}, {port}, {now}, {msg}\n')
-  trace._lock.release()
+  with trace.lock:
+    now = datetime.now().isoformat()
+    LOG.info('Trace %s', name)
+    try:
+      with open(f'/tmp/dxcluster-{name}.txt', 'a', encoding='utf-8') as tfd:
+        tfd.write(f'{now} {host} {port} {msg}\n')
+    except FileNotFoundError as err:
+      LOG.info(err)
 
 
 def main():
@@ -527,8 +521,8 @@ def main():
 
   def _sig_handler(_signum, _frame):
     if _signum == signal.SIGHUP:
-      LOG.setLevel(log_levels.__next__())
-      LOG.warning('SIGHUP received, switching to %s', logging._levelToName[LOG.level])
+      LOG.setLevel(next(log_levels))
+      LOG.warning('SIGHUP received, switching to %s', logging.getLevelName(LOG.level))
     elif _signum == SIGINFO:
       thread_list = [t for t in thread_enum() if isinstance(t, Cluster)]
       LOG.info('Clusters: %s', ', '.join(t.name for t in thread_list))
