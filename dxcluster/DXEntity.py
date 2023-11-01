@@ -15,6 +15,7 @@ import time
 
 from collections import defaultdict
 from functools import lru_cache
+from threading import Lock
 from urllib.error import HTTPError
 from urllib.request import urlretrieve
 
@@ -25,6 +26,7 @@ CTY_DB = "cty.db"
 CTY_EXPIRE = 86400 * 7          # One week
 
 LRU_CACHE_SIZE = 8192
+LOCK = Lock()
 
 class DXCCRecord:
   # pylint: disable=too-few-public-methods
@@ -52,30 +54,32 @@ class DXCC:
     self._db = os.path.join(os.path.expanduser(CTY_HOME), CTY_DB)
     cty_file = os.path.join(os.path.expanduser(CTY_HOME), CTY_FILE)
 
-    try:
-      fstat = os.stat(self._db)
-      if fstat.st_mtime + CTY_EXPIRE > time.time():
-        logging.info('Using DXCC cache %s', self._db)
-        with dbm.open(self._db, 'r') as cdb:
-          self._entities, self._max_len = marshal.loads(cdb['_meta_data_'])
-        return
-    except FileNotFoundError:
-      logging.error('DXEntity cache not found')
-    except dbm.error as err:
-      logging.error(err)
+    with LOCK:
+      try:
+        fstat = os.stat(self._db)
+        if fstat.st_mtime + CTY_EXPIRE > time.time():
+          logging.info('Using DXCC cache %s', self._db)
+          with dbm.open(self._db, 'r') as cdb:
+            self._entities, self._max_len = marshal.loads(cdb['_meta_data_'])
+          return
+      except FileNotFoundError:
+        logging.error('DXEntity cache not found')
+      except dbm.error as err:
+        logging.error(err)
 
-    logging.info('Download %s', cty_file)
-    self.load_cty(cty_file)
-    with open(cty_file, 'rb') as fdc:
-      cty_data = plistlib.load(fdc)
-    self._max_len = max(len(k) for k in cty_data)
+      logging.info('Download %s', cty_file)
+      self.load_cty(cty_file)
+      with open(cty_file, 'rb') as fdc:
+        cty_data = plistlib.load(fdc)
+      self._max_len = max(len(k) for k in cty_data)
 
-    logging.info('Create cty cache: %s', self._db)
-    with dbm.open(self._db, 'c') as cdb:
-      for key, val in cty_data.items():
-        cdb[key] = marshal.dumps(val)
-        self._entities[val['Country']].add(key)
-      cdb['_meta_data_'] = marshal.dumps([dict(self._entities), self._max_len])
+      logging.info('Create cty cache: %s', self._db)
+      with dbm.open(self._db, 'c') as cdb:
+        for key, val in cty_data.items():
+          cdb[key] = marshal.dumps(val)
+          self._entities[val['Country']].add(key)
+        cdb['_meta_data_'] = marshal.dumps([dict(self._entities), self._max_len])
+
 
   def lookup(self, call):
     _, info = self.get_prefix(call)
