@@ -419,33 +419,36 @@ class Cluster(Thread):
     while not self._stop.is_set() and retry:
       try:
         line = self.telnet.read_until(b'\n', self.timeout)
-        if not line:
+      except EOFError:
+        break
+      line = line.decode('UTF-8', 'replace').rstrip()
+      match MatchSpot(line):
+        case r'^DX de':
+          self.process_spot(line)
+        case r'^WWV de':
+          self.process_wwv(line)
+        case r'To ALL de':
+          self.process_message(line)
+        case r'WCY de':
+          pass		# this case will be handled soon
+        case r'^$':
+          retry -= 1
           LOG.warning('Nothing read from: %s retry: %d', self.host, 1 + TELNET_RETRY - retry)
           trace(self.name, self.host, self.port, f'retry: {retry}')
           retry -= 1
           continue
+        case _:
+          LOG.debug("retry: %d, line %s", retry, line)
 
-        retry = TELNET_RETRY
-        line = line.decode('UTF-8', 'replace').rstrip()
-        if line.startswith('DX de'):
-          self.process_spot(line)
-        elif line.startswith('WWV de'):
-          self.process_wwv(line)
-        elif line.startswith('To ALL de'):
-          self.process_message(line)
-        elif line.startswith('WCY de '):
-          # Not processed yet
-          pass
-        else:
-          LOG.debug("retry: %d, Line: %s", retry, line)
-      except EOFError:
-        break
-
+      retry = TELNET_RETRY
 
     trace(self.name, self.host, self.port, 'Shutdown')
     LOG.info('Thread finished closing telnet')
     self.telnet.close()
 
+class MatchSpot(str):
+  def __eq__(self, pattern):
+    return bool(re.match(pattern, self))
 
 class SaveRecords(Thread):
   def __init__(self, queue, db_name):
