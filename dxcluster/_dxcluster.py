@@ -333,6 +333,11 @@ def parse_message(line):
   return MessageRecord(fields)
 
 
+class MatchSpot(str):
+  def __eq__(self, pattern):
+    return bool(re.match(pattern, self))
+
+
 class MessageRecord(namedtuple("MessageRecord", "de, time, message, timestamp")):
   def __new__(cls, items):
     _items = list(items)
@@ -445,9 +450,6 @@ class Cluster(Thread):
     LOG.info('Thread finished closing telnet')
     self.telnet.close()
 
-class MatchSpot(str):
-  def __eq__(self, pattern):
-    return bool(re.match(pattern, self))
 
 class SaveRecords(Thread):
   def __init__(self, queue, db_name):
