@@ -427,15 +427,14 @@ class Cluster(Thread):
           self.process_spot(line)
         case r'^WWV de':
           self.process_wwv(line)
-        case r'To ALL de':
+        case r'^To ALL de':
           self.process_message(line)
-        case r'WCY de':
+        case r'^WCY de':
           pass		# this case will be handled soon
         case r'^$':
           retry -= 1
           LOG.warning('Nothing read from: %s retry: %d', self.host, 1 + TELNET_RETRY - retry)
           trace(self.name, self.host, self.port, f'retry: {retry}')
-          retry -= 1
           continue
         case _:
           LOG.debug("retry: %d, line %s", retry, line)
