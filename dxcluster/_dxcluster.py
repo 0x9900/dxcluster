@@ -410,7 +410,6 @@ class Cluster(Thread):
       LOG.exception("message: you need to deal with this error: %s", err)
 
   def run(self):
-    trace(self.name, self.host, self.port, 'Start')
     try:
       LOG.info("Server: %s:%d", self.host, self.port)
       self.telnet = Telnet(self.host, self.port, timeout=self.timeout)
@@ -439,14 +438,12 @@ class Cluster(Thread):
         case r'^$':
           retry -= 1
           LOG.warning('Nothing read from: %s retry: %d', self.host, 1 + TELNET_RETRY - retry)
-          trace(self.name, self.host, self.port, f'retry: {retry}')
           continue
         case _:
           LOG.debug("retry: %d, line %s", retry, line)
 
       retry = TELNET_RETRY
 
-    trace(self.name, self.host, self.port, 'Shutdown')
     LOG.info('Thread finished closing telnet')
     self.telnet.close()
 
@@ -497,20 +494,6 @@ class SaveRecords(Thread):
             LOG.exception('Critical error %s', err)
 
     LOG.error("SaveRecord thread stopped")
-
-
-def trace(name, host, port, msg):
-  if not hasattr(trace, '_lock'):
-    trace.lock = Lock()
-
-  with trace.lock:
-    now = datetime.now().isoformat()
-    LOG.info('Trace %s', name)
-    try:
-      with open(f'/tmp/dxcluster-{name}.txt', 'a', encoding='utf-8') as tfd:
-        tfd.write(f'{now} {host} {port} {msg}\n')
-    except FileNotFoundError as err:
-      LOG.info(err)
 
 
 def main():
