@@ -35,9 +35,9 @@ from dxcluster.config import Config
 
 TELNET_RETRY = 3
 TELNET_TIMEOUT = 27
-FIELDS = ['DE', 'FREQUENCY', 'DX', 'MESSAGE', 'T_SIG', 'DE_CONT',
-          'TO_CONT', 'DE_ITUZONE', 'TO_ITUZONE', 'DE_CQZONE',
-          'TO_CQZONE', 'MODE', 'SIGNAL', 'BAND', 'TIME']
+FIELDS = ['de', 'frequency', 'dx', 'message', 't_sig', 'de_cont',
+          'to_cont', 'de_ituzone', 'to_ituzone', 'de_cqzone',
+          'to_cqzone', 'mode', 'signal', 'band', 'time']
 
 SQL_TABLE = """
 PRAGMA synchronous = EXTRA;
@@ -109,7 +109,7 @@ logging.basicConfig(format=LOG_FORMAT, datefmt='%x %X', level=logging.INFO)
 LOG = logging.getLogger('dxcluster')
 
 
-def connect_db(db_name, timeout=5):
+def connect_db(db_name: str, timeout: int=5) -> sqlite3.Connection:
   try:
     conn = sqlite3.connect(db_name, timeout=timeout,
                            detect_types=DETECT_TYPES, isolation_level=None)
@@ -119,13 +119,13 @@ def connect_db(db_name, timeout=5):
     sys.exit(os.EX_IOERR)
   return conn
 
-def create_db(db_name):
+def create_db(db_name: str) -> None:
   with connect_db(db_name) as conn:
     curs = conn.cursor()
     curs.executescript(SQL_TABLE)
 
 
-def get_band(freq):
+def get_band(freq: int) -> float:
   # Quick and dirty way to convert frequencies to bands.
   # I should probably have a band plan for each ITU zones.
   # Sorted by the most popular to the least popular band
@@ -157,7 +157,7 @@ def get_band(freq):
   return 0
 
 
-def dxspider_options(telnet, email):
+def dxspider_options(telnet: Telnet, email: str) -> None:
   commands = (
     b'set/dx filter\n',
     b'set/wwv on\n',
@@ -169,7 +169,7 @@ def dxspider_options(telnet, email):
     LOG.debug('%s - Command: %s', telnet.host, cmd.decode('UTF-8').rstrip())
     time.sleep(.25)
 
-def ar_options(telnet, _):
+def ar_options(telnet: Telnet, _: str) -> None:
   commands = (
     b'set/dx/filter',
     b'set/wwv/output on',
@@ -180,7 +180,7 @@ def ar_options(telnet, _):
     time.sleep(.25)
 
 
-def cc_options(telnet, _):
+def cc_options(telnet: Telnet, _: str) -> None:
   commands = (b'SET/WWV\n', b'SET/FT4\n', b'SET/FT8\n',  b'SET/PSK\n', b'SET/RTTY\n',
               b'SET/SKIMMER\n')
   for cmd in commands:
@@ -188,7 +188,7 @@ def cc_options(telnet, _):
     LOG.debug('%s - Command: %s', telnet.host, cmd.decode('UTF-8').rstrip())
     time.sleep(.25)
 
-def login(call, telnet, email, timeout):
+def login(telnet: Telnet, call: str,  email: str, timeout: int) -> None:
   clusters = {
     "running cc cluster": cc_options,
     "ar-cluster": ar_options,
@@ -210,14 +210,15 @@ def login(call, telnet, email, timeout):
   except EOFError as err:
     raise OSError(f'{err}: {buffer}') from err
 
-  buffer = b'\n'.join(buffer).decode('UTF-8', 'replace')
-  if 'invalid callsign' in buffer:
+  s_buffer = b'\n'.join(buffer).decode('UTF-8', 'replace')
+
+  if 'invalid callsign' in s_buffer:
     raise OSError('invalid callsign')
 
-  match = re_spider.search(buffer)
-  if not match:
+  _match = re_spider.search(str(s_buffer))
+  if not _match:
     raise OSError('Unknown cluster type')
-  match_str = match.group().lower()
+  match_str = _match.group().lower()
   try:
     LOG.info('%s:%d running %s', telnet.host, telnet.port, match_str)
     set_options = clusters[match_str]
@@ -226,27 +227,48 @@ def login(call, telnet, email, timeout):
   set_options(telnet, email)
 
 
-def parse_spot(line):
+@dataclass(frozen=True)
+class DXSpotRecord:
+  de: str
+  frequency: float
+  dx: str
+  message: str
+  t_sig: datetime
+  de_cont: str
+  to_cont: str
+  de_ituzone: int
+  to_ituzone: int
+  de_cqzone: int
+  to_cqzone: int
+  mode: str
+  signal: int
+  band: int | None = None
+  time: datetime | None = None
+
+  def __post_init__(self):
+    if self.band is None:
+      object.__setattr__(self, 'band', get_band(self.frequency))
+    if self.time is None:
+      object.__setattr__(self, 'time', datetime.utcnow())
+
+class Static:
+  dxcc = DXCC()
+  spot_splitter = re.compile(r'[:\s]+').split
+  msgparse = re.compile(
+      r'^(?P<mode>FT[48]|CW|RTTY|PSK[\d]*)\s+(?P<db>[+-]?\ ?\d+).*'
+    ).match
+
+
+def parse_spot(line: str) -> DXSpotRecord | None:
   #
   # DX de DO4DXA-#:  14025.0  GB22GE       CW 10 dB 25 WPM CQ             1516Z
   # 0.........1.........2.........3.........4.........5.........6.........7.........8
   #           0         0         0         0         0         0         0         0
-  if not hasattr(parse_spot, 'dxcc'):
-    parse_spot.dxcc = DXCC()
-
-  if not hasattr(parse_spot, 'splitter'):
-    parse_spot.splitter = re.compile(r'[:\s]+').split
-
-  if not hasattr(parse_spot, 'msgparse'):
-    parse_spot.msgparse = re.compile(
-      r'^(?P<mode>FT[48]|CW|RTTY|PSK[\d]*)\s+(?P<db>[+-]?\ ?\d+).*'
-    ).match
-
   if not line:
     return None
 
   try:
-    elem = parse_spot.splitter(line)[2:]
+    elem = Static.spot_splitter(line)[2:]
     fields = [
       elem[0].strip('-#'),
       float(elem[1]),
@@ -259,7 +281,7 @@ def parse_spot(line):
 
   for c_code in fields[0].split('/', 1):
     try:
-      call_de = parse_spot.dxcc.lookup(c_code)
+      call_de = Static.dxcc.lookup(c_code)
       break
     except KeyError:
       pass
@@ -269,7 +291,7 @@ def parse_spot(line):
 
   for c_code in fields[2].split('/', 1):
     try:
-      call_to = parse_spot.dxcc.lookup(c_code)
+      call_to = Static.dxcc.lookup(c_code)
       break
     except KeyError:
       pass
@@ -277,7 +299,7 @@ def parse_spot(line):
     LOG.warning("%s Not found | %s", fields[2], line)
     return None
 
-  match = parse_spot.msgparse(fields[3])
+  match = Static.msgparse(fields[3])
   if match:
     mode = match.group('mode')
     db_signal = match.group('db')
@@ -305,14 +327,23 @@ def parse_spot(line):
   return DXSpotRecord(*fields)
 
 
-def parse_wwv(line):
+@dataclass(frozen=True)
+class WWVRecord:
+  sfi: int
+  a: int
+  k: int
+  conditions: str
+  time: datetime = datetime.utcnow()
+
+
+def parse_wwv(line: str) -> WWVRecord | None:
   decoder = re.compile(
     r'.*\sSFI=(?P<SFI>\d+), A=(?P<A>\d+), K=(?P<K>\d+), (?P<conditions>.*)$'
   )
-  match = decoder.match(line)
-  if not match:
+  _match = decoder.match(line)
+  if not _match:
     return None
-  match = match.groupdict()
+  match = _match.groupdict()
   fields = [
     int(match['SFI']),
     int(match['A']),
@@ -322,7 +353,15 @@ def parse_wwv(line):
   return WWVRecord(*fields)
 
 
-def parse_message(line):
+@dataclass(frozen=True)
+class MessageRecord:
+  de: str
+  time: str
+  message: str
+  timestamp: datetime = datetime.utcnow()
+
+
+def parse_message(line: str) -> MessageRecord | None:
   decoder = re.compile(
     r'To ALL de ([-\w]+) \<(\d+Z)>.* : (.*)'
   )
@@ -334,54 +373,14 @@ def parse_message(line):
 
 
 class MatchSpot(str):
-  def __eq__(self, pattern):
-    return bool(re.match(pattern, self))
-
-
-@dataclass(frozen=True)
-class MessageRecord:
-  de: str
-  time: str
-  message: str
-  timestamp: datetime = datetime.utcnow()
-
-
-@dataclass(frozen=True)
-class WWVRecord:
-  SFI: int
-  A: int
-  K: int
-  conditions: str
-  time: datetime = datetime.utcnow()
-
-
-@dataclass(frozen=True)
-class DXSpotRecord:
-  DE: str
-  FREQUENCY: float
-  DX: str
-  MESSAGE: str
-  T_SIG: datetime
-  DE_CONT: str
-  TO_CONT: str
-  DE_ITUZONE: int
-  TO_ITUZONE: int
-  DE_CQZONE: int
-  TO_CQZONE: int
-  MODE: str
-  SIGNAL: int
-  BAND: int | None = None
-  TIME: datetime | None = None
-
-  def __post_init__(self):
-    if self.BAND is None:
-      object.__setattr__(self, 'BAND', get_band(self.FREQUENCY))
-    if self.TIME is None:
-      object.__setattr__(self, 'TIME', datetime.utcnow())
+  def __eq__(self, pattern: object) -> bool:
+    if isinstance(pattern, MatchSpot):
+      return NotImplemented
+    return bool(re.match(str(pattern), self))
 
 
 class Cluster(Thread):
-  def __init__(self, host, port, queue, call, email):
+  def __init__(self, host: str, port: int, queue: Queue, call: str, email: str) -> None:
     super().__init__()
     self.host = host
     self.port = port
@@ -390,12 +389,12 @@ class Cluster(Thread):
     self.email = email
     self._stop = Event()
     self.timeout = TELNET_TIMEOUT
-    self.telnet = None
+    self.telnet: Telnet | None = None
 
-  def stop(self):
+  def stop(self) -> None:
     self._stop.set()
 
-  def process_spot(self, line):
+  def process_spot(self, line: str) -> None:
     try:
       record = parse_spot(line)
       if record:
@@ -403,7 +402,7 @@ class Cluster(Thread):
     except Exception as err:
       LOG.exception("process_spot: you need to deal with this error: %s", err)
 
-  def process_wwv(self, line):
+  def process_wwv(self, line: str) -> None:
     try:
       record = parse_wwv(line)
       if record:
@@ -411,7 +410,7 @@ class Cluster(Thread):
     except Exception as err:
       LOG.exception("wwv: you need to deal with this error: %s", err)
 
-  def process_message(self, line):
+  def process_message(self, line: str) -> None:
     try:
       record = parse_message(line)
       if record:
@@ -419,11 +418,11 @@ class Cluster(Thread):
     except Exception as err:
       LOG.exception("message: you need to deal with this error: %s", err)
 
-  def run(self):
+  def run(self) -> None:
     try:
       LOG.info("Server: %s:%d", self.host, self.port)
       self.telnet = Telnet(self.host, self.port, timeout=self.timeout)
-      login(self.call, self.telnet, self.email, self.timeout)
+      login(self.telnet, self.call, self.email, self.timeout)
       LOG.info("Sucessful login into %s:%d", self.host, self.port)
     except (EOFError, OSError, TimeoutError, UnboundLocalError) as err:
       LOG.error(err)
@@ -432,10 +431,10 @@ class Cluster(Thread):
     retry = TELNET_RETRY
     while not self._stop.is_set() and retry:
       try:
-        line = self.telnet.read_until(b'\n', self.timeout)
+        _line = self.telnet.read_until(b'\n', self.timeout)
       except EOFError:
         break
-      line = line.decode('UTF-8', 'replace').rstrip()
+      line = _line.decode('UTF-8', 'replace').rstrip()
       match MatchSpot(line):
         case r'^DX de':
           self.process_spot(line)
@@ -459,19 +458,19 @@ class Cluster(Thread):
 
 
 class SaveRecords(Thread):
-  def __init__(self, queue, db_name):
+  def __init__(self, queue: Queue, db_name: str) -> None:
     super().__init__()
     self.db_name = db_name
     self.queue = queue
     self._stop = Event()
 
-  def stop(self):
+  def stop(self) -> None:
     self._stop.set()
 
-  def running(self):
+  def running(self) -> bool:
     return not self._stop.is_set()
 
-  def write(self, conn, table, records):
+  def write(self, conn: sqlite3.Connection, table: str, records: list[tuple]) -> None:
     command = QUERIES[table]
     with conn:
       cursor = conn.cursor()
@@ -505,7 +504,6 @@ class SaveRecords(Thread):
 
     LOG.error("SaveRecord thread stopped")
 
-
 def main():
   config = Config()
   queue = Queue(config.queue_size)
@@ -524,7 +522,7 @@ def main():
       thread_list = [t for t in thread_enum() if isinstance(t, Cluster)]
       LOG.info('Clusters: %s', ', '.join(t.name for t in thread_list))
       try:
-        cache_info = parse_spot.dxcc.get_prefix.cache_info() # ugly but it works.
+        cache_info = Static.dxcc.get_prefix.cache_info() # ugly but it works.
         rate = 100 * cache_info.hits / (cache_info.misses + cache_info.hits)
         LOG.info("DXEntities cache %s -> %.2f%%", cache_info, rate)
       except AttributeError:
