@@ -323,8 +323,6 @@ def parse_wwv(line):
 
 
 def parse_message(line):
-  from ipdb import set_trace
-  set_trace()
   decoder = re.compile(
     r'To ALL de ([-\w]+) \<(\d+Z)>.* : (.*)'
   )
