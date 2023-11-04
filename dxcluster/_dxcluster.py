@@ -19,7 +19,7 @@ import sys
 import time
 
 from collections import defaultdict
-from collections import namedtuple
+from dataclasses import astuple, dataclass, field
 from datetime import datetime
 from itertools import cycle
 from queue import Queue
@@ -302,7 +302,7 @@ def parse_spot(line):
     mode,
     db_signal,
   ])
-  return DXSpotRecord(fields)
+  return DXSpotRecord(*fields)
 
 
 def parse_wwv(line):
@@ -319,10 +319,12 @@ def parse_wwv(line):
     int(match['K']),
     match['conditions'],
   ]
-  return WWVRecord(fields)
+  return WWVRecord(*fields)
 
 
 def parse_message(line):
+  from ipdb import set_trace
+  set_trace()
   decoder = re.compile(
     r'To ALL de ([-\w]+) \<(\d+Z)>.* : (.*)'
   )
@@ -330,7 +332,7 @@ def parse_message(line):
   if not match:
     return None
   fields = match.groups()
-  return MessageRecord(fields)
+  return MessageRecord(*fields)
 
 
 class MatchSpot(str):
@@ -338,36 +340,46 @@ class MatchSpot(str):
     return bool(re.match(pattern, self))
 
 
-class MessageRecord(namedtuple("MessageRecord", "de, time, message, timestamp")):
-  def __new__(cls, items):
-    _items = list(items)
-    _items.append(datetime.utcnow())
-    return tuple.__new__(cls, _items)
-
-  def as_list(self):
-    return [self.de, self.time, self.message, self.timestamp]
+dataclass(frozen=True)
+class MessageRecord:
+  de: str
+  time: str
+  message: str
+  timestamp: datetime = datetime.utcnow()
 
 
-class WWVRecord(namedtuple("WWVRecord", "SFI, A, K, conditions, time")):
-  def __new__(cls, items):
-    _items = items
-    _items.append(datetime.utcnow())
-    return tuple.__new__(cls, _items)
+@dataclass(frozen=True)
+class WWVRecord:
+  SFI: int
+  A: int
+  K: int
+  conditions: str
+  time: datetime = datetime.utcnow()
 
-  def as_list(self):
-    return [self.SFI, self.A, self.K, self.conditions, self.time]
 
-class DXSpotRecord(namedtuple('DXSpotRecord', FIELDS)):
-  def __new__(cls, items):
-    _items = items
-    _items.append(get_band(_items[1]))
-    _items.append(datetime.utcnow())
-    return tuple.__new__(cls, _items)
+@dataclass(frozen=True)
+class DXSpotRecord:
+  DE: str
+  FREQUENCY: float
+  DX: str
+  MESSAGE: str
+  T_SIG: datetime
+  DE_CONT: str
+  TO_CONT: str
+  DE_ITUZONE: int
+  TO_ITUZONE: int
+  DE_CQZONE: int
+  TO_CQZONE: int
+  MODE: str
+  SIGNAL: int
+  BAND: int | None = None
+  TIME: datetime | None = None
 
-  def as_list(self):
-    return [self.DE, self.FREQUENCY, self.DX, self.MESSAGE, self.T_SIG, self.DE_CONT,
-            self.TO_CONT, self.DE_ITUZONE, self.TO_ITUZONE, self.DE_CQZONE,
-            self.TO_CQZONE, self.MODE, self.SIGNAL, self.BAND, self.TIME]
+  def __post_init__(self):
+    if self.BAND is None:
+      object.__setattr__(self, 'BAND', get_band(self.FREQUENCY))
+    if self.TIME is None:
+      object.__setattr__(self, 'TIME', datetime.utcnow())
 
 
 class Cluster(Thread):
@@ -482,7 +494,7 @@ class SaveRecords(Thread):
         data = defaultdict(list)
         while self.queue.qsize():
           table, record = self.queue.get()
-          data[table].append(record.as_list())
+          data[table].append(astuple(record))
         if not data:
           time.sleep(0.5)
           continue
@@ -504,7 +516,7 @@ def main():
   next_server = cycle(servers).__next__
   adapters.install_adapters()
   create_db(config.db_name)
-  log_levels = cycle([10, 20, 30])
+  log_levels = cycle([logging.DEBUG, logging.INFO])
 
   def _sig_handler(_signum, _frame):
     if _signum == signal.SIGHUP:
