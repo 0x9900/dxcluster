@@ -19,12 +19,12 @@ import sys
 import time
 
 from collections import defaultdict
-from dataclasses import astuple, dataclass, field
+from dataclasses import astuple, dataclass
 from datetime import datetime
 from itertools import cycle
 from queue import Queue
 from telnetlib import Telnet
-from threading import Event, Lock, Thread
+from threading import Event, Thread
 from threading import enumerate as thread_enum
 
 import sqlite3
@@ -208,7 +208,7 @@ def login(call, telnet, email, timeout):
       buffer.append(telnet.read_very_eager())
       time.sleep(0.25)
   except EOFError as err:
-    raise OSError(f'{err}: {buffer}')
+    raise OSError(f'{err}: {buffer}') from err
 
   buffer = b'\n'.join(buffer).decode('UTF-8', 'replace')
   if 'invalid callsign' in buffer:
@@ -338,7 +338,7 @@ class MatchSpot(str):
     return bool(re.match(pattern, self))
 
 
-dataclass(frozen=True)
+@dataclass(frozen=True)
 class MessageRecord:
   de: str
   time: str
@@ -542,8 +542,7 @@ def main():
   s_thread.start()
 
   LOG.info('Installing signal handlers')
-  for sig in (signal.SIGHUP, SIGINFO, signal.SIGINT,
-              signal.SIGQUIT, signal.SIGTERM):
+  for sig in (signal.SIGHUP, SIGINFO, signal.SIGINT, signal.SIGQUIT, signal.SIGTERM):
     signal.signal(sig, _sig_handler)
 
   # Monitor the running threads.
