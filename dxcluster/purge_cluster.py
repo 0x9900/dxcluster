@@ -39,6 +39,7 @@ def main():
   purge_time = datetime.utcnow() - delta
 
   logging.info('Database: %s, timeout %d', config.db_name, config.db_timeout)
+  logging.info('Delta: %0.1f days', delta.days)
   conn = sqlite3.connect(
     config.db_name, timeout=5, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES
   )

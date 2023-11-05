@@ -170,10 +170,11 @@ def dxspider_options(telnet: Telnet, email: str) -> None:
     LOG.debug('%s - Command: %s', telnet.host, cmd.decode('UTF-8').rstrip())
     time.sleep(.25)
 
+
 def ar_options(telnet: Telnet, _: str) -> None:
   commands = (
-    b'set/dx/filter',
-    b'set/wwv/output on',
+    b'set/dx/filter\n',
+    b'set/wwv/output on\n',
   )
   for cmd in commands:
     telnet.write(cmd)
@@ -188,6 +189,7 @@ def cc_options(telnet: Telnet, _: str) -> None:
     telnet.write(cmd)
     LOG.debug('%s - Command: %s', telnet.host, cmd.decode('UTF-8').rstrip())
     time.sleep(.25)
+
 
 def login(telnet: Telnet, call: str,  email: str, timeout: int) -> None:
   clusters = {
@@ -230,7 +232,7 @@ def login(telnet: Telnet, call: str,  email: str, timeout: int) -> None:
 
 @dataclass(frozen=True)
 class DXSpotRecord:
-  # pylint: disable=invalid-name
+  # pylint: disable=invalid-name, too-many-instance-attributes
   de: str
   frequency: float
   dx: str
@@ -252,6 +254,7 @@ class DXSpotRecord:
       object.__setattr__(self, 'band', get_band(self.frequency))
     if self.time is None:
       object.__setattr__(self, 'time', datetime.utcnow())
+
 
 class Static:
   # pylint: disable=too-few-public-methods
