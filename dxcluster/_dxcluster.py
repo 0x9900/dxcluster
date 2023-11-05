@@ -19,13 +19,14 @@ import sys
 import time
 
 from collections import defaultdict
-from dataclasses import astuple, dataclass
+from dataclasses import astuple, dataclass, field
 from datetime import datetime
 from itertools import cycle
 from queue import Queue
 from telnetlib import Telnet
 from threading import Event, Thread
 from threading import enumerate as thread_enum
+from typing import Dict, Any
 
 import sqlite3
 
@@ -229,6 +230,7 @@ def login(telnet: Telnet, call: str,  email: str, timeout: int) -> None:
 
 @dataclass(frozen=True)
 class DXSpotRecord:
+  # pylint: disable=invalid-name
   de: str
   frequency: float
   dx: str
@@ -252,6 +254,7 @@ class DXSpotRecord:
       object.__setattr__(self, 'time', datetime.utcnow())
 
 class Static:
+  # pylint: disable=too-few-public-methods
   dxcc = DXCC()
   spot_splitter = re.compile(r'[:\s]+').split
   msgparse = re.compile(
@@ -267,39 +270,40 @@ def parse_spot(line: str) -> DXSpotRecord | None:
   if not line:
     return None
 
+  fields: Dict[str, Any] = {}
   try:
     elem = Static.spot_splitter(line)[2:]
-    fields = [
-      elem[0].strip('-#'),
-      float(elem[1]),
-      elem[2],
-      ' '.join(elem[3:len(elem) - 1]),
-    ]
+    fields.update({
+      'de': elem[0].strip('-#'),
+      'frequency': float(elem[1]),
+      'dx': elem[2],
+      'message': ' '.join(elem[3:len(elem) - 1]),
+    })
   except ValueError as err:
     LOG.warning("%s | %s", err, re.sub(r'[\n\r\t]+', ' ', line))
     return None
 
-  for c_code in fields[0].split('/', 1):
+  for c_code in fields['de'].split('/', 1):
     try:
       call_de = Static.dxcc.lookup(c_code)
       break
     except KeyError:
       pass
   else:
-    LOG.warning("%s Not found | %s", fields[0], line)
+    LOG.warning("%s Not found | %s", fields['de'], line)
     return None
 
-  for c_code in fields[2].split('/', 1):
+  for c_code in fields['dx'].split('/', 1):
     try:
       call_to = Static.dxcc.lookup(c_code)
       break
     except KeyError:
       pass
   else:
-    LOG.warning("%s Not found | %s", fields[2], line)
+    LOG.warning("%s Not found | %s", fields['dx'], line)
     return None
 
-  match = Static.msgparse(fields[3])
+  match = Static.msgparse(fields['message'])
   if match:
     mode = match.group('mode')
     db_signal = match.group('db')
@@ -313,27 +317,27 @@ def parse_spot(line: str) -> DXSpotRecord | None:
   except ValueError:
     t_sig = now.replace(minute=0, second=0, microsecond=0)
 
-  fields.extend([
-    t_sig,
-    call_de.continent,
-    call_to.continent,
-    call_de.ituzone,
-    call_to.ituzone,
-    call_de.cqzone,
-    call_to.cqzone,
-    mode,
-    db_signal,
-  ])
-  return DXSpotRecord(*fields)
+  fields['t_sig'] = t_sig
+  fields['de_cont'] =  call_de.continent
+  fields['to_cont'] =  call_to.continent
+  fields['de_ituzone'] =  call_de.ituzone
+  fields['to_ituzone'] =  call_to.ituzone
+  fields['de_cqzone'] =  call_de.cqzone
+  fields['to_cqzone'] =  call_to.cqzone
+  fields['mode'] =  mode
+  fields['signal'] =  db_signal
+
+  return DXSpotRecord(**fields)
 
 
 @dataclass(frozen=True)
 class WWVRecord:
+  # pylint: disable=invalid-name
   sfi: int
   a: int
   k: int
   conditions: str
-  time: datetime = datetime.utcnow()
+  time: datetime = field(default=datetime.utcnow(), init=False)
 
 
 def parse_wwv(line: str) -> WWVRecord | None:
@@ -344,21 +348,22 @@ def parse_wwv(line: str) -> WWVRecord | None:
   if not _match:
     return None
   match = _match.groupdict()
-  fields = [
+  fields = (
     int(match['SFI']),
     int(match['A']),
     int(match['K']),
     match['conditions'],
-  ]
+  )
   return WWVRecord(*fields)
 
 
 @dataclass(frozen=True)
 class MessageRecord:
+  # pylint: disable=invalid-name
   de: str
   time: str
   message: str
-  timestamp: datetime = datetime.utcnow()
+  timestamp: datetime = field(default=datetime.utcnow(), init=False)
 
 
 def parse_message(line: str) -> MessageRecord | None:
@@ -372,9 +377,9 @@ def parse_message(line: str) -> MessageRecord | None:
   return MessageRecord(*fields)
 
 
-class MatchSpot(str):
+class ReString(str):
   def __eq__(self, pattern: object) -> bool:
-    if isinstance(pattern, MatchSpot):
+    if isinstance(pattern, ReString):
       return NotImplemented
     return bool(re.match(str(pattern), self))
 
@@ -389,7 +394,6 @@ class Cluster(Thread):
     self.email = email
     self._stop = Event()
     self.timeout = TELNET_TIMEOUT
-    self.telnet: Telnet | None = None
 
   def stop(self) -> None:
     self._stop.set()
@@ -419,42 +423,39 @@ class Cluster(Thread):
       LOG.exception("message: you need to deal with this error: %s", err)
 
   def run(self) -> None:
+    LOG.info("Server: %s:%d", self.host, self.port)
     try:
-      LOG.info("Server: %s:%d", self.host, self.port)
-      self.telnet = Telnet(self.host, self.port, timeout=self.timeout)
-      login(self.telnet, self.call, self.email, self.timeout)
-      LOG.info("Sucessful login into %s:%d", self.host, self.port)
+      with Telnet(self.host, self.port, timeout=self.timeout) as telnet:
+        login(telnet, self.call, self.email, self.timeout)
+        LOG.info("Sucessful login into %s:%d", self.host, self.port)
+
+        retry = TELNET_RETRY
+        while not self._stop.is_set() and retry:
+          try:
+            _line = telnet.read_until(b'\n', self.timeout)
+            line = ReString(_line.decode('UTF-8', 'replace').rstrip())
+          except EOFError:
+            break
+          if line == r'^DX de':
+            self.process_spot(line)
+          elif line == r'^WWV de':
+            self.process_wwv(line)
+          elif line == r'^To ALL de':
+            self.process_message(line)
+          elif line == r'^WCY de':
+            pass		# this case will be handled soon
+          elif line == r'^$':
+            retry -= 1
+            LOG.warning('Nothing read from: %s retry: %d', self.host, 1 + TELNET_RETRY - retry)
+            continue
+          else:
+            LOG.debug("retry: %d, line %s", retry, line)
+          retry = TELNET_RETRY
     except (EOFError, OSError, TimeoutError, UnboundLocalError) as err:
       LOG.error(err)
       return
-
-    retry = TELNET_RETRY
-    while not self._stop.is_set() and retry:
-      try:
-        _line = self.telnet.read_until(b'\n', self.timeout)
-      except EOFError:
-        break
-      line = _line.decode('UTF-8', 'replace').rstrip()
-      match MatchSpot(line):
-        case r'^DX de':
-          self.process_spot(line)
-        case r'^WWV de':
-          self.process_wwv(line)
-        case r'^To ALL de':
-          self.process_message(line)
-        case r'^WCY de':
-          pass		# this case will be handled soon
-        case r'^$':
-          retry -= 1
-          LOG.warning('Nothing read from: %s retry: %d', self.host, 1 + TELNET_RETRY - retry)
-          continue
-        case _:
-          LOG.debug("retry: %d, line %s", retry, line)
-
-      retry = TELNET_RETRY
-
     LOG.info('Thread finished closing telnet')
-    self.telnet.close()
+    telnet.close()
 
 
 class SaveRecords(Thread):
