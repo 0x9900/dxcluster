@@ -218,8 +218,8 @@ def login(telnet: Telnet, call: str,  email: str, timeout: int) -> None:
   if 'invalid callsign' in s_buffer:
     raise OSError('invalid callsign')
 
-  _match = re_spider.search(str(s_buffer))
-  if not _match:
+
+  if not (_match := re_spider.search(str(s_buffer))):
     raise OSError('Unknown cluster type')
   match_str = _match.group().lower()
   try:
@@ -306,8 +306,7 @@ def parse_spot(line: str) -> DXSpotRecord | None:
     LOG.warning("%s Not found | %s", fields['dx'], line)
     return None
 
-  match = Static.msgparse(fields['message'])
-  if match:
+  if (match := Static.msgparse(fields['message'])):
     mode = match.group('mode')
     db_signal = match.group('db')
   else:
@@ -347,8 +346,8 @@ def parse_wwv(line: str) -> WWVRecord | None:
   decoder = re.compile(
     r'.*\sSFI=(?P<SFI>\d+), A=(?P<A>\d+), K=(?P<K>\d+), (?P<conditions>.*)$'
   )
-  _match = decoder.match(line)
-  if not _match:
+
+  if not (_match := decoder.match(line)):
     return None
   match = _match.groupdict()
   fields = (
@@ -373,8 +372,8 @@ def parse_message(line: str) -> MessageRecord | None:
   decoder = re.compile(
     r'To ALL de ([-\w]+) \<(\d+Z)>.* : (.*)'
   )
-  match = decoder.match(line)
-  if not match:
+
+  if not (match := decoder.match(line)):
     return None
   fields = match.groups()
   return MessageRecord(*fields)
@@ -403,24 +402,21 @@ class Cluster(Thread):
 
   def process_spot(self, line: str) -> None:
     try:
-      record = parse_spot(line)
-      if record:
+      if (record := parse_spot(line)):
         self.queue.put(['dxspot', record])
     except Exception as err:
       LOG.exception("process_spot: you need to deal with this error: %s", err)
 
   def process_wwv(self, line: str) -> None:
     try:
-      record = parse_wwv(line)
-      if record:
+      if (record := parse_wwv(line)):
         self.queue.put(['wwv', record])
     except Exception as err:
       LOG.exception("wwv: you need to deal with this error: %s", err)
 
   def process_message(self, line: str) -> None:
     try:
-      record = parse_message(line)
-      if record:
+      if (record := parse_message(line)):
         self.queue.put(['messages', record])
     except Exception as err:
       LOG.exception("message: you need to deal with this error: %s", err)
