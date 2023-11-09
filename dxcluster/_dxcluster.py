@@ -30,6 +30,7 @@ from typing import Dict, Any
 
 import sqlite3
 
+from dxcluster import __version__
 from dxcluster import adapters
 from dxcluster.DXEntity import DXCC
 from dxcluster.config import Config
@@ -160,10 +161,10 @@ def get_band(freq: int) -> float:
 
 def dxspider_options(telnet: Telnet, email: str) -> None:
   commands = (
-    b'set/dx filter\n',
     b'set/wwv on\n',
     b'set/wwv output on\n',
     f'set/email {email}\n'.encode(),
+    b'set/dx filter\n',
   )
   for cmd in commands:
     telnet.write(cmd)
@@ -173,8 +174,8 @@ def dxspider_options(telnet: Telnet, email: str) -> None:
 
 def ar_options(telnet: Telnet, _: str) -> None:
   commands = (
-    b'set/dx/filter\n',
     b'set/wwv/output on\n',
+    b'set/dx/filter\n',
   )
   for cmd in commands:
     telnet.write(cmd)
@@ -433,6 +434,7 @@ class Cluster(Thread):
           try:
             _line = telnet.read_until(b'\n', self.timeout)
             line = ReString(_line.decode('UTF-8', 'replace').rstrip())
+            Cluster.dumpline(line)
           except EOFError:
             break
           if line == r'^DX de':
@@ -455,6 +457,13 @@ class Cluster(Thread):
       return
     LOG.info('Thread finished closing telnet')
     telnet.close()
+
+  @staticmethod
+  def dumpline(line: str) -> None:
+    if not line:
+      return
+    with open('/tmp/dxcluster-dump.txt', 'a', encoding='utf-8') as dfd:
+      dfd.write(line + "\n")
 
 
 class SaveRecords(Thread):
@@ -495,7 +504,6 @@ class SaveRecords(Thread):
         if not data:
           time.sleep(0.5)
           continue
-
         for table, records in data.items():
           try:
             self.write(conn, table, records)
@@ -513,6 +521,7 @@ def main():
   adapters.install_adapters()
   create_db(config.db_name)
   log_levels = cycle([logging.DEBUG, logging.INFO])
+  LOG.info('Starting dxcluster version: %s', __version__)
 
   def _sig_handler(_signum, _frame):
     if _signum == signal.SIGHUP:

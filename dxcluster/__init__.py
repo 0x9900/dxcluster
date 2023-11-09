@@ -4,6 +4,6 @@
 # Copyright (c) 2023, Fred W6BSD
 # All rights reserved.
 #
-__version__ = "0.0.1"
+__version__ = "0.0.2"
 
 from dxcluster._dxcluster import *
