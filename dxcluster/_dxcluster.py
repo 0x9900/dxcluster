@@ -294,7 +294,7 @@ def parse_spot(line: str) -> DXSpotRecord | None:
     except KeyError:
       pass
   else:
-    LOG.warning("%s Not found | %s", fields['de'], line)
+    LOG.debug("%s Not found | %s", fields['de'], line)
     return None
 
   for c_code in fields['dx'].split('/', 1):
@@ -304,7 +304,7 @@ def parse_spot(line: str) -> DXSpotRecord | None:
     except KeyError:
       pass
   else:
-    LOG.warning("%s Not found | %s", fields['dx'], line)
+    LOG.debug("%s Not found | %s", fields['dx'], line)
     return None
 
   if (match := Static.msgparse(fields['message'])):
@@ -529,6 +529,7 @@ def main():
       LOG.warning('SIGHUP received, switching to %s', logging.getLevelName(LOG.level))
     elif _signum == SIGINFO:
       thread_list = [t for t in thread_enum() if isinstance(t, Cluster)]
+      LOG.info('Running dxcluster version: %s', __version__)
       LOG.info('Clusters: %s', ', '.join(t.name for t in thread_list))
       try:
         cache_info = Static.dxcc.get_prefix.cache_info() # ugly but it works.
