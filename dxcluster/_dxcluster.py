@@ -510,7 +510,7 @@ class SaveRecords(Thread):
           except Exception as err:
             LOG.exception('Critical error %s', err)
 
-    LOG.error("SaveRecord thread stopped")
+    LOG.warning("SaveRecord thread stopped")
 
 def main():
   config = Config()
