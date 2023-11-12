@@ -349,6 +349,7 @@ def parse_wwv(line: str) -> WWVRecord | None:
   )
 
   if not (_match := decoder.match(line)):
+    LOG.warning('WWV parse error: %s', line)
     return None
   match = _match.groupdict()
   fields = (
@@ -440,6 +441,7 @@ class Cluster(Thread):
           if line == r'^DX de':
             self.process_spot(line)
           elif line == r'^WWV de':
+            LOG.warning('process_wwv(%s)', line)
             self.process_wwv(line)
           elif line == r'^To ALL de':
             self.process_message(line)
