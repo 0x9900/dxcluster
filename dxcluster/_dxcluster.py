@@ -350,7 +350,12 @@ class WWVRecord:
   a: int
   k: int
   conditions: str
-  time: datetime = field(default=datetime.utcnow(), init=False)
+  time: datetime | None = None
+
+  def __post_init__(self):
+    if self.time is None:
+      _curtime = datetime.utcnow().replace(microsecond=0)
+      object.__setattr__(self, 'time', _curtime)
 
 
 def parse_wwv(line: str) -> WWVRecord | None:
@@ -377,7 +382,11 @@ class MessageRecord:
   de: str
   time: str
   message: str
-  timestamp: datetime = field(default=datetime.utcnow(), init=False)
+  timestamp: datetime | None = None
+
+  def __post_init__(self):
+    if self.timestamp is None:
+      object.__setattr__(self, 'timestamp', datetime.now().replace(microsecond=0))
 
 
 def parse_message(line: str) -> MessageRecord | None:
@@ -451,7 +460,6 @@ class Cluster(Thread):
           if line == r'^DX de':
             self.process_spot(line)
           elif line == r'^WWV de':
-            LOG.warning('process_wwv(%s)', line)
             self.process_wwv(line)
           elif line == r'^To ALL de':
             self.process_message(line)
@@ -493,8 +501,6 @@ class SaveRecords(Thread):
 
   def write(self, conn: sqlite3.Connection, table: str, records: list[tuple]) -> None:
     command = QUERIES[table]
-    if table == Tables.WWV:
-      LOG.info("%s %s", command.strip(), records)
     with conn:
       cursor = conn.cursor()
       while True:
