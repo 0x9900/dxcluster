@@ -21,6 +21,7 @@ import time
 from collections import defaultdict
 from dataclasses import astuple, dataclass, field
 from datetime import datetime
+from enum import Enum
 from itertools import cycle
 from queue import Queue
 from telnetlib import Telnet
@@ -34,6 +35,7 @@ from dxcluster import __version__
 from dxcluster import adapters
 from dxcluster.DXEntity import DXCC
 from dxcluster.config import Config
+
 
 TELNET_RETRY = 3
 TELNET_TIMEOUT = 27
@@ -73,7 +75,8 @@ CREATE TABLE IF NOT EXISTS wwv (
   conditions TEXT,
   time TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS wwv_idx_time on wwv (time DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS wwv_idx_time_unique on wwv (time DESC);
+
 CREATE TABLE IF NOT EXISTS messages (
   de TEXT,
   time TEXT,
@@ -85,17 +88,24 @@ CREATE UNIQUE INDEX IF NOT EXISTS messages_idx_unique ON messages (de, time);
 
 DETECT_TYPES = sqlite3.PARSE_DECLTYPES
 
+class Tables(Enum):
+  DXSPOT = 1
+  WWV = 2
+  MESSAGE = 3
+
 QUERIES = {}
-QUERIES['dxspot'] = f"""
+QUERIES[Tables.DXSPOT] = f"""
   INSERT OR IGNORE INTO dxspot ({', '.join(f for f in FIELDS)})
   VALUES ({','.join('?' for _ in FIELDS)})
 """
-QUERIES['wwv'] = """
-  INSERT INTO wwv (SFI, A, K, conditions, time) VALUES (?, ?, ?, ?, ?)
+QUERIES[Tables.WWV] = """
+  INSERT OR IGNORE  INTO wwv (SFI, A, K, conditions, time) VALUES (?, ?, ?, ?, ?)
 """
-QUERIES['messages'] = """
+QUERIES[Tables.MESSAGE] = """
   INSERT OR IGNORE INTO messages (de, time, message, timestamp) VALUES (?, ?, ?, ?)
 """
+
+
 
 if sys.platform == 'linux':
   SIGINFO = signal.SIGUSR1
@@ -405,21 +415,21 @@ class Cluster(Thread):
   def process_spot(self, line: str) -> None:
     try:
       if (record := parse_spot(line)):
-        self.queue.put(['dxspot', record])
+        self.queue.put((Tables.DXSPOT, record))
     except Exception as err:
       LOG.exception("process_spot: you need to deal with this error: %s", err)
 
   def process_wwv(self, line: str) -> None:
     try:
       if (record := parse_wwv(line)):
-        self.queue.put(['wwv', record])
+        self.queue.put((Tables.WWV, record))
     except Exception as err:
       LOG.exception("wwv: you need to deal with this error: %s", err)
 
   def process_message(self, line: str) -> None:
     try:
       if (record := parse_message(line)):
-        self.queue.put(['messages', record])
+        self.queue.put((Tables.MESSAGE, record))
     except Exception as err:
       LOG.exception("message: you need to deal with this error: %s", err)
 
@@ -448,8 +458,8 @@ class Cluster(Thread):
           elif line == r'^WCY de':
             pass		# this case will be handled soon
           elif line == r'^$':
-            retry -= 1
             LOG.warning('Nothing read from: %s retry: %d', self.host, 1 + TELNET_RETRY - retry)
+            retry -= 1
             continue
           else:
             LOG.debug("retry: %d, line %s", retry, line)
@@ -483,6 +493,8 @@ class SaveRecords(Thread):
 
   def write(self, conn: sqlite3.Connection, table: str, records: list[tuple]) -> None:
     command = QUERIES[table]
+    if table == Tables.WWV:
+      LOG.info("%s %s", command.strip(), records)
     with conn:
       cursor = conn.cursor()
       while True:
