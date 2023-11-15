@@ -320,6 +320,7 @@ def parse_spot(line: str) -> DXSpotRecord | None:
   if (match := Static.msgparse(fields['message'])):
     mode = match.group('mode')
     db_signal = match.group('db')
+    db_signal = int(db_signal.replace(' ', ''))
   else:
     mode = db_signal = None
 
@@ -333,12 +334,12 @@ def parse_spot(line: str) -> DXSpotRecord | None:
   fields['t_sig'] = t_sig
   fields['de_cont'] =  call_de.continent
   fields['to_cont'] =  call_to.continent
-  fields['de_ituzone'] =  call_de.ituzone
-  fields['to_ituzone'] =  call_to.ituzone
-  fields['de_cqzone'] =  call_de.cqzone
-  fields['to_cqzone'] =  call_to.cqzone
+  fields['de_ituzone'] =  int(call_de.ituzone)
+  fields['to_ituzone'] =  int(call_to.ituzone)
+  fields['de_cqzone'] =  int(call_de.cqzone)
+  fields['to_cqzone'] =  int(call_to.cqzone)
   fields['mode'] =  mode
-  fields['signal'] =  db_signal
+  fields['signal'] = db_signal
 
   return DXSpotRecord(**fields)
 
@@ -454,7 +455,6 @@ class Cluster(Thread):
           try:
             _line = telnet.read_until(b'\n', self.timeout)
             line = ReString(_line.decode('UTF-8', 'replace').rstrip())
-            Cluster.dumpline(line)
           except EOFError:
             break
           if line == r'^DX de':
