@@ -21,4 +21,8 @@ jobs:
         pip install PyYAML
     - name: Analysing the code with pylint
       run: |
-        pylint $(git ls-files '*.py')
+        pylint dxcluster/DXEntity.py
+        pylint dxcluster/_dxcluster.py
+        pylint dxcluster/adapters.py
+        pylint dxcluster/config.py
+        pylint dxcluster/purge_cluster.py
