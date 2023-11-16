@@ -29,7 +29,7 @@ def purge(conn, purge_time):
     logging.info('%d record deleted', curs.rowcount)
     curs.execute("COMMIT")
   except conn.error:
-   curs.execute("ROLLBACK")
+    curs.execute("ROLLBACK")
 
 
 def main():
