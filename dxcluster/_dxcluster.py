@@ -195,7 +195,7 @@ def ar_options(telnet: Telnet, _: str) -> None:
 
 
 def cc_options(telnet: Telnet, _: str) -> None:
-  commands = (b'SET/WWV\n', b'SET/FT4\n', b'SET/FT8\n',  b'SET/PSK\n', b'SET/RTTY\n',
+  commands = (b'SET/WWV\n', b'SET/FT4\n', b'SET/FT8\n', b'SET/PSK\n', b'SET/RTTY\n',
               b'SET/SKIMMER\n')
   for cmd in commands:
     telnet.write(cmd)
@@ -319,15 +319,19 @@ def parse_spot(line: str) -> DXSpotRecord | None:
     LOG.debug("%s Not found | %s", fields['dx'], line)
     return None
 
-  now = datetime.utcnow()
-  if (match := Static.msgparse(fields['message'])):
+  match = Static.msgparse(fields['message'])
+  if match:
     mode = match.group('mode')
     db_signal = match.group('db')
     db_signal = int(db_signal.replace(' ', ''))
+  else:
+    mode = db_signal = None
+
+  now = datetime.utcnow()
+  if match and match.group('t_sig'):
     t_sig = match.group('t_sig')
     t_sig = now.replace(hour=int(t_sig[:2]), minute=int(t_sig[2:4]), second=0, microsecond=0)
   else:
-    mode = db_signal = None
     t_sig = now.replace(minute=0, second=0, microsecond=0)
 
   fields['t_sig'] = t_sig
