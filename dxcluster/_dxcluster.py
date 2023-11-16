@@ -417,7 +417,7 @@ def block_exceptions(func: t.Callable[..., t.Any]) -> t.Any:
       return func(*args, **kwargs)
     except Exception as err:
       with open('/tmp/dxcluster-dump.txt', 'a', encoding='utf-8') as dfd:
-        dfd.write(line + "\n")
+        dfd.write(args[1] + "\n")
       LOG.exception("process_spot: you need to deal with this error: %s", err)
     return None
   return wrapper
