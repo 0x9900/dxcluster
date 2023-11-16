@@ -109,9 +109,9 @@ QUERIES[Tables.MESSAGE] = """
 
 
 if sys.platform == 'linux':
-  SIGINFO = signal.SIGUSR1
+  SIGINFO = signal.SIGUSR1		# pylint: disable=no-member
 else:
-  SIGINFO = signal.SIGINFO
+  SIGINFO = signal.SIGINFO		# pylint: disable=no-member
 
 if os.isatty(sys.stdout.fileno()):
   LOG_FORMAT = '%(asctime)s - %(threadName)s %(lineno)d %(levelname)s - %(message)s'
