@@ -17,17 +17,18 @@ import re
 import signal
 import sys
 import time
+import typing as t
 
 from collections import defaultdict
 from dataclasses import astuple, dataclass, field
 from datetime import datetime
 from enum import Enum
+from functools import partial, wraps
 from itertools import cycle
 from queue import Queue
 from telnetlib import Telnet
 from threading import Event, Thread
 from threading import enumerate as thread_enum
-from typing import Dict, Any
 
 import sqlite3
 
@@ -270,9 +271,9 @@ class DXSpotRecord:
 class Static:
   # pylint: disable=too-few-public-methods
   dxcc = DXCC()
-  spot_splitter = re.compile(r'[:\s]+').split
+  spot_splitter = partial(re.compile(r'[:\s]+').split, maxsplit=5)
   msgparse = re.compile(
-      r'^(?P<mode>FT[48]|CW|RTTY|PSK[\d]*)\s+(?P<db>[+-]?\ ?\d+).*'
+      r'(?P<mode>FT[48]|CW|RTTY|PSK[\d]*)\s+(?P<db>[+-]?\ ?\d+).*\s((?P<t_sig>\d{4}Z)|).*'
     ).match
 
 
@@ -284,14 +285,14 @@ def parse_spot(line: str) -> DXSpotRecord | None:
   if not line:
     return None
 
-  fields: Dict[str, Any] = {}
+  fields: t.Dict[str, t.Any] = {}
   try:
     elem = Static.spot_splitter(line)[2:]
     fields.update({
       'de': elem[0].strip('-#'),
       'frequency': float(elem[1]),
       'dx': elem[2],
-      'message': ' '.join(elem[3:len(elem) - 1]),
+      'message': elem[3],
     })
   except ValueError as err:
     LOG.warning("%s | %s", err, re.sub(r'[\n\r\t]+', ' ', line))
@@ -317,18 +318,15 @@ def parse_spot(line: str) -> DXSpotRecord | None:
     LOG.debug("%s Not found | %s", fields['dx'], line)
     return None
 
+  now = datetime.utcnow()
   if (match := Static.msgparse(fields['message'])):
     mode = match.group('mode')
     db_signal = match.group('db')
     db_signal = int(db_signal.replace(' ', ''))
+    t_sig = match.group('t_sig')
+    t_sig = now.replace(hour=int(t_sig[:2]), minute=int(t_sig[2:4]), second=0, microsecond=0)
   else:
     mode = db_signal = None
-
-  t_sig = elem[-1]
-  now = datetime.utcnow()
-  try:
-    t_sig = now.replace(hour=int(t_sig[:2]), minute=int(t_sig[2:4]), second=0, microsecond=0)
-  except ValueError:
     t_sig = now.replace(minute=0, second=0, microsecond=0)
 
   fields['t_sig'] = t_sig
@@ -361,20 +359,31 @@ class WWVRecord:
 
 def parse_wwv(line: str) -> WWVRecord | None:
   decoder = re.compile(
-    r'.*\sSFI=(?P<SFI>\d+), A=(?P<A>\d+), K=(?P<K>\d+), (?P<conditions>.*)$'
+    r'.*\sSFI=(?P<SFI>\d+), A=(?P<A>\d+), K=(?P<K>\d+), ((?P<c1>.*)(\s|)->(\s|)(?P<c2>.*)|)'
   )
 
   if not (_match := decoder.match(line)):
     LOG.warning('WWV parse error: %s', line)
     return None
   match = _match.groupdict()
-  fields = (
-    int(match['SFI']),
-    int(match['A']),
-    int(match['K']),
-    match['conditions'],
+  conditions = []
+  for key in ('c1', 'c2'):
+    if match[key] and not match[key].startswith('No Storm'):
+      conditions.append(match[key].rstrip())
+  s_cond = ' - '.join(conditions)
+  return WWVRecord(int(match['SFI']), int(match['A']), int(match['K']), s_cond)
+
+
+def parse_wcy(line: str) -> WWVRecord | None:
+  # WCY de DK0WCY-2 <01> : K=2 expK=0 A=7 R=85 SFI=134 SA=eru GMF=qui Au=no
+  decoder = re.compile(
+    r'WCY de .*\sK=(?P<K>\d+).*\sA=(?P<A>\d+).*\sSFI=(?P<SFI>\d+).*'
   )
-  return WWVRecord(*fields)
+  if not (_match := decoder.match(line)):
+    LOG.warning('WCY parse error: %s', line)
+    return None
+  match = _match.groupdict()
+  return WWVRecord(int(match['SFI']), int(match['A']), int(match['K']), '')
 
 
 @dataclass(frozen=True)
@@ -383,7 +392,7 @@ class MessageRecord:
   de: str
   time: str
   message: str
-  timestamp: datetime | None = None
+  timestamp: datetime | None = field(init=False, default=None)
 
   def __post_init__(self):
     if self.timestamp is None:
@@ -392,13 +401,26 @@ class MessageRecord:
 
 def parse_message(line: str) -> MessageRecord | None:
   decoder = re.compile(
-    r'To ALL de ([-\w]+) \<(\d+Z)>.* : (.*)'
+    r'To ALL de ([-\w]+) <(\d{4}Z)>.* : (.*)'
   )
 
   if not (match := decoder.match(line)):
     return None
-  fields = match.groups()
+  fields = tuple(match.groups())
   return MessageRecord(*fields)
+
+
+def block_exceptions(func: t.Callable[..., t.Any]) -> t.Any:
+  @wraps(func)
+  def wrapper(*args: t.Any, **kwargs: t.Any) -> t.Any:
+    try:
+      return func(*args, **kwargs)
+    except Exception as err:
+      with open('/tmp/dxcluster-dump.txt', 'a', encoding='utf-8') as dfd:
+        dfd.write(line + "\n")
+      LOG.exception("process_spot: you need to deal with this error: %s", err)
+    return None
+  return wrapper
 
 
 class ReString(str):
@@ -422,26 +444,25 @@ class Cluster(Thread):
   def stop(self) -> None:
     self._stop.set()
 
+  @block_exceptions
   def process_spot(self, line: str) -> None:
-    try:
-      if (record := parse_spot(line)):
-        self.queue.put((Tables.DXSPOT, record))
-    except Exception as err:
-      LOG.exception("process_spot: you need to deal with this error: %s", err)
+    if (record := parse_spot(line)):
+      self.queue.put((Tables.DXSPOT, record))
 
+  @block_exceptions
   def process_wwv(self, line: str) -> None:
-    try:
-      if (record := parse_wwv(line)):
-        self.queue.put((Tables.WWV, record))
-    except Exception as err:
-      LOG.exception("wwv: you need to deal with this error: %s", err)
+    if (record := parse_wwv(line)):
+      self.queue.put((Tables.WWV, record))
 
+  @block_exceptions
+  def process_wcy(self, line: str) -> None:
+    if (record := parse_wcy(line)):
+      self.queue.put((Tables.WWV, record))
+
+  @block_exceptions
   def process_message(self, line: str) -> None:
-    try:
-      if (record := parse_message(line)):
-        self.queue.put((Tables.MESSAGE, record))
-    except Exception as err:
-      LOG.exception("message: you need to deal with this error: %s", err)
+    if (record := parse_message(line)):
+      self.queue.put((Tables.MESSAGE, record))
 
   def run(self) -> None:
     LOG.info("Server: %s:%d", self.host, self.port)
@@ -464,7 +485,7 @@ class Cluster(Thread):
           elif line == r'^To ALL de':
             self.process_message(line)
           elif line == r'^WCY de':
-            pass		# this case will be handled soon
+            self.process_wcy(line)
           elif line == r'^$':
             LOG.warning('Nothing read from: %s retry: %d', self.host, 1 + TELNET_RETRY - retry)
             retry -= 1
@@ -477,13 +498,6 @@ class Cluster(Thread):
       return
     LOG.info('Thread finished closing telnet')
     telnet.close()
-
-  @staticmethod
-  def dumpline(line: str) -> None:
-    if not line:
-      return
-    with open('/tmp/dxcluster-dump.txt', 'a', encoding='utf-8') as dfd:
-      dfd.write(line + "\n")
 
 
 class SaveRecords(Thread):
@@ -499,7 +513,7 @@ class SaveRecords(Thread):
   def running(self) -> bool:
     return not self._stop.is_set()
 
-  def write(self, conn: sqlite3.Connection, table: str, records: list[tuple]) -> None:
+  def write(self, conn: sqlite3.Connection, table: Tables, records: list[tuple]) -> None:
     command = QUERIES[table]
     with conn:
       cursor = conn.cursor()
@@ -578,7 +592,7 @@ def main():
   while s_thread.running():
     thread_list = [t for t in thread_enum() if isinstance(t, Cluster)]
     if len(thread_list) >= config.nb_threads:
-      time.sleep(1)
+      time.sleep(3)
       continue
     name, host, port = next_server()
     th_cluster = Cluster(host, port, queue, config.call, config.email)
