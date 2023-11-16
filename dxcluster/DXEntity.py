@@ -1,8 +1,11 @@
 #
-# BSD 3-Clause License
-#
-# Copyright (c) 2023, Fred W6BSD
+# Copyright (c) 2023, Fred Cirera
 # All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+#
+# b'DX de SP5NOF:   10136.0  UI5A     FT8 +13dB from KO85 1778Hz   2138Z\r\n'
 #
 # pylint: disable=invalid-name,method-hidden
 
