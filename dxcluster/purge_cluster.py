@@ -12,8 +12,7 @@ import sqlite3
 
 from datetime import datetime, timedelta
 
-from dxcluster import adapters
-from dxcluster.config import Config
+import dxcluster
 
 logging.basicConfig(
   format='%(asctime)s - %(lineno)d %(levelname)s - %(message)s',
@@ -33,8 +32,8 @@ def purge(conn, purge_time):
 
 
 def main():
-  adapters.install_adapters()
-  config = Config()
+  dxcluster.adapters.install_adapters()
+  config = dxcluster.Config()
   delta = timedelta(hours=config.purge_time)
   purge_time = datetime.utcnow() - delta
 

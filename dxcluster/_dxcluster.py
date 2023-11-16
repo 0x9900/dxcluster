@@ -8,7 +8,7 @@
 # b'DX de SP5NOF:   10136.0  UI5A     FT8 +13dB from KO85 1778Hz   2138Z\r\n'
 # b'WWV de W0MU <18Z> :   SFI=93, A=4, K=2, No Storms -> No Storms\r\n'
 #
-# pylint: disable=no-member,unspecified-encoding
+# pylint: disable=unsupported-binary-operation,too-many-arguments
 
 import logging
 import os
@@ -204,6 +204,7 @@ def cc_options(telnet: Telnet, _: str) -> None:
 
 
 def login(telnet: Telnet, call: str,  email: str, timeout: int) -> None:
+  # pylint: disable=too-many-locals
   clusters = {
     "running cc cluster": cc_options,
     "ar-cluster": ar_options,
@@ -431,6 +432,7 @@ class ReString(str):
 
 
 class Cluster(Thread):
+  # pylint: disable=too-many-instance-attributes
   def __init__(self, host: str, port: int, queue: Queue, call: str, email: str) -> None:
     super().__init__()
     self.host = host

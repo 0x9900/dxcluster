@@ -4,7 +4,7 @@
 # Copyright (c) 2023, Fred W6BSD
 # All rights reserved.
 #
-# pylint: disable=invalid-name
+# pylint: disable=invalid-name,method-hidden
 
 import dbm.gnu as dbm
 import logging
@@ -82,6 +82,7 @@ class DXCC:
 
 
   def lookup(self, call):
+    # pylint: disable=method-hidden
     _, info = self.get_prefix(call)
     return info
 
