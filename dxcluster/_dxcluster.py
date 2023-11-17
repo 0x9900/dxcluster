@@ -41,9 +41,6 @@ from dxcluster.config import Config
 
 TELNET_RETRY = 3
 TELNET_TIMEOUT = 27
-FIELDS = ['de', 'frequency', 'dx', 'message', 't_sig', 'de_cont',
-          'to_cont', 'de_ituzone', 'to_ituzone', 'de_cqzone',
-          'to_cqzone', 'mode', 'signal', 'band', 'time']
 
 SQL_TABLE = """
 PRAGMA synchronous = EXTRA;
@@ -95,17 +92,22 @@ class Tables(Enum):
   WWV = 2
   MESSAGE = 3
 
-QUERIES = {}
-QUERIES[Tables.DXSPOT] = f"""
-  INSERT OR IGNORE INTO dxspot ({', '.join(f for f in FIELDS)})
-  VALUES ({','.join('?' for _ in FIELDS)})
-"""
-QUERIES[Tables.WWV] = """
-  INSERT OR IGNORE  INTO wwv (SFI, A, K, conditions, time) VALUES (?, ?, ?, ?, ?)
-"""
-QUERIES[Tables.MESSAGE] = """
-  INSERT OR IGNORE INTO messages (de, time, message, timestamp) VALUES (?, ?, ?, ?)
-"""
+QUERIES = {
+  Tables.DXSPOT: """
+  INSERT OR IGNORE INTO dxspot
+    (de, frequency, dx, message, t_sig, de_cont, to_cont, de_ituzone,
+    to_ituzone, de_cqzone, to_cqzone, mode, signal, band, time)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  """,
+  Tables.WWV: """
+  INSERT OR IGNORE  INTO wwv (SFI, A, K, conditions, time)
+  VALUES (?, ?, ?, ?, ?)
+  """,
+  Tables.MESSAGE: """
+  INSERT OR IGNORE INTO messages (de, time, message, timestamp)
+  VALUES (?, ?, ?, ?)
+  """,
+}
 
 
 
