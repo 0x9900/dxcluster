@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 import dxcluster
 
 logging.basicConfig(
-  format='%(asctime)s - %(lineno)d %(levelname)s - %(message)s',
+  format='%(asctime)s %(name)s:%(lineno)3d - %(levelname)s - %(message)s', datefmt='%x %X',
   level=logging.INFO
 )
 

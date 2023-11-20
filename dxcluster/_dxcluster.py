@@ -110,7 +110,6 @@ QUERIES = {
 }
 
 
-
 if sys.platform == 'linux':
   SIGINFO = signal.SIGUSR1		# pylint: disable=no-member
 else:
