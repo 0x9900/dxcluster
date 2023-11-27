@@ -26,6 +26,7 @@ from datetime import datetime
 from enum import Enum
 from functools import partial, wraps
 from itertools import cycle
+from queue import Full as QFull
 from queue import Queue
 from telnetlib import Telnet
 from threading import Event, Thread
@@ -455,22 +456,35 @@ class Cluster(Thread):
   @block_exceptions
   def process_spot(self, line: str) -> None:
     if (record := parse_spot(line)):
-      self.queue.put((Tables.DXSPOT, record))
+      try:
+        self.queue.put((Tables.DXSPOT, record))
+      except QFull:
+        pass
 
   @block_exceptions
   def process_wwv(self, line: str) -> None:
     if (record := parse_wwv(line)):
-      self.queue.put((Tables.WWV, record))
+      try:
+        self.queue.put((Tables.WWV, record))
+      except QFull:
+        pass
 
   @block_exceptions
   def process_wcy(self, line: str) -> None:
     if (record := parse_wcy(line)):
-      self.queue.put((Tables.WWV, record))
+      try:
+        self.queue.put((Tables.WWV, record))
+      except QFull:
+        pass
 
   @block_exceptions
   def process_message(self, line: str) -> None:
     if (record := parse_message(line)):
-      self.queue.put((Tables.MESSAGE, record))
+      try:
+        self.queue.put((Tables.MESSAGE, record))
+      except QFull:
+        pass
+
 
   def run(self) -> None:
     LOG.info("Server: %s:%d", self.host, self.port)
@@ -540,11 +554,17 @@ class SaveRecords(Thread):
     with connect_db(self.db_name) as conn:
       while self.running():
         data = defaultdict(list)
+        count = 0
         while self.queue.qsize():
           table, record = self.queue.get()
           data[table].append(astuple(record))
+          count += 1
+          if count >= 512:
+            break
+
+        print(len(data))
         if not data:
-          time.sleep(0.5)
+          time.sleep(1)
           continue
         for table, records in data.items():
           try:
