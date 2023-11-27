@@ -562,7 +562,6 @@ class SaveRecords(Thread):
           if count >= 512:
             break
 
-        print(len(data))
         if not data:
           time.sleep(1)
           continue
