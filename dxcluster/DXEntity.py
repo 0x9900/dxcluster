@@ -49,11 +49,19 @@ class DXCCRecord:
 
 
 class DXCC:
+  _instance = None
+  get_prefix = None
+
+  def __new__(cls, *args, **kwargs):
+    if not cls._instance:
+      cls._instance = super().__new__(cls)
+    return cls._instance
 
   def __init__(self):
+    if not self.get_prefix:
+      self.get_prefix = lru_cache(maxsize=LRU_CACHE_SIZE)(self.cached_get_prefix)
     self._entities = defaultdict(set)
     self._max_len = 0
-    self.get_prefix = lru_cache(maxsize=LRU_CACHE_SIZE)(self.get_prefix)
     self._db = os.path.join(os.path.expanduser(CTY_HOME), CTY_DB)
     cty_file = os.path.join(os.path.expanduser(CTY_HOME), CTY_FILE)
 
@@ -89,7 +97,7 @@ class DXCC:
     _, info = self.get_prefix(call)
     return info
 
-  def get_prefix(self, call):
+  def cached_get_prefix(self, call):
     call = call.upper()
     prefixes = list({call[:c] for c in range(self._max_len, 0, -1)})
     prefixes.sort(key=lambda x: -len(x))

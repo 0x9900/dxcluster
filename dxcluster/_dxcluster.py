@@ -6,7 +6,6 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 #
-# b'DX de SP5NOF:   10136.0  UI5A     FT8 +13dB from KO85 1778Hz   2138Z\r\n'
 # b'WWV de W0MU <18Z> :   SFI=93, A=4, K=2, No Storms -> No Storms\r\n'
 #
 # pylint: disable=unsupported-binary-operation,too-many-arguments
@@ -274,7 +273,7 @@ class DXSpotRecord:
 
 class Static:
   # pylint: disable=too-few-public-methods
-  dxcc = DXCC()
+  dxcc = None
   spot_splitter = partial(re.compile(r'[:\s]+').split, maxsplit=5)
   msgparse = re.compile(
       r'(?P<mode>FT[48]|CW|RTTY|PSK[\d]*)\s+(?P<db>[+-]?\ ?\d+).*\s((?P<t_sig>\d{4}Z)|).*'
@@ -535,6 +534,17 @@ class SaveRecords(Thread):
   def running(self) -> bool:
     return not self._stop.is_set()
 
+  def read_queue(self):
+    data = defaultdict(list)
+    count = 0
+    while self.queue.qsize():
+      table, record = self.queue.get()
+      data[table].append(astuple(record))
+      count += 1
+      if count >= 512:
+        break
+    return data
+
   def write(self, conn: sqlite3.Connection, table: Tables, records: list[tuple]) -> None:
     command = QUERIES[table]
     with conn:
@@ -553,27 +563,18 @@ class SaveRecords(Thread):
   def run(self):
     with connect_db(self.db_name) as conn:
       while self.running():
-        data = defaultdict(list)
-        count = 0
-        while self.queue.qsize():
-          table, record = self.queue.get()
-          data[table].append(astuple(record))
-          count += 1
-          if count >= 512:
-            break
-
-        if not data:
-          time.sleep(1)
-          continue
+        data = self.read_queue()
         for table, records in data.items():
           try:
             self.write(conn, table, records)
           except Exception as err:
             LOG.exception('Critical error %s', err)
+        time.sleep(.5)
 
     LOG.warning("SaveRecord thread stopped")
 
 def main():
+  Static.dxcc = DXCC()
   config = Config()
   queue = Queue(config.queue_size)
   servers = config.servers
