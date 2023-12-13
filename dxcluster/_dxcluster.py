@@ -245,7 +245,7 @@ def login(telnet: Telnet, call: str,  email: str, timeout: int) -> None:
   set_options(telnet, email)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DXSpotRecord:
   # pylint: disable=invalid-name, too-many-instance-attributes
   de: str
@@ -349,7 +349,7 @@ def parse_spot(line: str) -> DXSpotRecord | None:
   return DXSpotRecord(**fields)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class WWVRecord:
   # pylint: disable=invalid-name
   sfi: int
@@ -393,7 +393,7 @@ def parse_wcy(line: str) -> WWVRecord | None:
   return WWVRecord(int(match['SFI']), int(match['A']), int(match['K']), '')
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MessageRecord:
   # pylint: disable=invalid-name
   de: str
@@ -556,7 +556,7 @@ class SaveRecords(Thread):
                     table, len(records), cursor.rowcount, len(records) - cursor.rowcount)
           break
         except sqlite3.OperationalError as err:
-          LOG.warning("Write error: %s, table: %s,  Queue len: %d",
+          LOG.warning("Write error: %s, table: %s, Queue len: %d",
                       err, table, self.queue.qsize())
           time.sleep(1)
 
@@ -573,10 +573,20 @@ class SaveRecords(Thread):
 
     LOG.warning("SaveRecord thread stopped")
 
+
+def make_queue(config):
+  if isinstance(config.queue_size, str) and config.queue_size.lower() == 'auto':
+    qsize = config.nb_threads * 2048
+  else:
+    qsize = config.queue_size
+  return Queue(qsize)
+
+
 def main():
   Static.dxcc = DXCC()
   config = Config()
-  queue = Queue(config.queue_size)
+  queue = make_queue(config)
+  print('*', 30, queue.maxsize)
   servers = config.servers
   random.shuffle(servers)
   next_server = cycle(servers).__next__
