@@ -586,7 +586,6 @@ def main():
   Static.dxcc = DXCC()
   config = Config()
   queue = make_queue(config)
-  print('*', 30, queue.maxsize)
   servers = config.servers
   random.shuffle(servers)
   next_server = cycle(servers).__next__
