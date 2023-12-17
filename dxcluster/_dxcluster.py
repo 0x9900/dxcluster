@@ -576,7 +576,7 @@ class SaveRecords(Thread):
 
 def make_queue(config):
   if isinstance(config.queue_size, str) and config.queue_size.lower() == 'auto':
-    qsize = config.nb_threads * 2048
+    qsize = int(config.nb_threads * 2048 * 1.2)
   else:
     qsize = config.queue_size
   return Queue(qsize)
