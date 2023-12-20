@@ -13,10 +13,12 @@ import yaml
 
 TELNET_TIMEOUT = 27
 
+
 class Config:
   DIRS = ['.', '~/.local']
   _instance = None
   config_data = None
+
   def __new__(cls, *args, **kwargs):
     if not cls._instance:
       cls._instance = super(Config, cls).__new__(cls)

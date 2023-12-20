@@ -9,7 +9,6 @@
 
 import logging
 import sqlite3
-
 from datetime import datetime, timedelta
 
 import dxcluster
@@ -18,6 +17,7 @@ logging.basicConfig(
   format='%(asctime)s %(name)s:%(lineno)3d - %(levelname)s - %(message)s', datefmt='%x %X',
   level=logging.INFO
 )
+
 
 def purge(conn, purge_time):
   logging.info("Purge entries from before: %s", purge_time.isoformat())
@@ -40,7 +40,7 @@ def main():
   logging.info('Database: %s, timeout %d', config.db_name, config.db_timeout)
   logging.info('Delta: %0.1f days', delta.days)
   conn = sqlite3.connect(
-    config.db_name, timeout=5, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES
+    config.db_name, timeout=5, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES
   )
   conn.isolation_level = None
 

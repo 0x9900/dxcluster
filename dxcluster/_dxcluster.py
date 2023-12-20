@@ -15,10 +15,10 @@ import os
 import random
 import re
 import signal
+import sqlite3
 import sys
 import time
 import typing as t
-
 from collections import defaultdict
 from dataclasses import astuple, dataclass, field
 from datetime import datetime
@@ -31,13 +31,9 @@ from telnetlib import Telnet
 from threading import Event, Thread
 from threading import enumerate as thread_enum
 
-import sqlite3
-
-from dxcluster import __version__
-from dxcluster import adapters
-from dxcluster.DXEntity import DXCC
+from dxcluster import __version__, adapters
 from dxcluster.config import Config
-
+from dxcluster.DXEntity import DXCC
 
 TELNET_RETRY = 3
 TELNET_TIMEOUT = 27
@@ -87,10 +83,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS messages_idx_unique ON messages (de, time);
 
 DETECT_TYPES = sqlite3.PARSE_DECLTYPES
 
+
 class Tables(Enum):
   DXSPOT = 1
   WWV = 2
   MESSAGE = 3
+
 
 QUERIES = {
   Tables.DXSPOT: """
@@ -124,7 +122,7 @@ logging.basicConfig(format=LOG_FORMAT, datefmt='%x %X', level=logging.INFO)
 LOG = logging.getLogger('dxcluster')
 
 
-def connect_db(db_name: str, timeout: int=5) -> sqlite3.Connection:
+def connect_db(db_name: str, timeout: int = 5) -> sqlite3.Connection:
   try:
     conn = sqlite3.connect(db_name, timeout=timeout,
                            detect_types=DETECT_TYPES, isolation_level=None)
@@ -133,6 +131,7 @@ def connect_db(db_name: str, timeout: int=5) -> sqlite3.Connection:
     LOG.error("Database: %s - %s", db_name, err)
     sys.exit(os.EX_IOERR)
   return conn
+
 
 def create_db(db_name: str) -> None:
   with connect_db(db_name) as conn:
@@ -205,7 +204,7 @@ def cc_options(telnet: Telnet, _: str) -> None:
     time.sleep(.25)
 
 
-def login(telnet: Telnet, call: str,  email: str, timeout: int) -> None:
+def login(telnet: Telnet, call: str, email: str, timeout: int) -> None:
   # pylint: disable=too-many-locals
   clusters = {
     "running cc cluster": cc_options,
@@ -232,7 +231,6 @@ def login(telnet: Telnet, call: str,  email: str, timeout: int) -> None:
 
   if 'invalid callsign' in s_buffer:
     raise OSError('invalid callsign')
-
 
   if not (_match := re_spider.search(str(s_buffer))):
     raise OSError('Unknown cluster type')
@@ -276,8 +274,8 @@ class Static:
   dxcc = None
   spot_splitter = partial(re.compile(r'[:\s]+').split, maxsplit=5)
   msgparse = re.compile(
-      r'(?P<mode>FT[48]|CW|RTTY|PSK[\d]*)\s+(?P<db>[+-]?\ ?\d+).*\s((?P<t_sig>\d{4}Z)|).*'
-    ).match
+    r'(?P<mode>FT[48]|CW|RTTY|PSK[\d]*)\s+(?P<db>[+-]?\ ?\d+).*\s((?P<t_sig>\d{4}Z)|).*'
+  ).match
 
 
 def parse_spot(line: str) -> DXSpotRecord | None:
@@ -337,13 +335,13 @@ def parse_spot(line: str) -> DXSpotRecord | None:
     t_sig = now.replace(minute=0, second=0, microsecond=0)
 
   fields['t_sig'] = t_sig
-  fields['de_cont'] =  call_de.continent
-  fields['to_cont'] =  call_to.continent
-  fields['de_ituzone'] =  int(call_de.ituzone)
-  fields['to_ituzone'] =  int(call_to.ituzone)
-  fields['de_cqzone'] =  int(call_de.cqzone)
-  fields['to_cqzone'] =  int(call_to.cqzone)
-  fields['mode'] =  mode
+  fields['de_cont'] = call_de.continent
+  fields['to_cont'] = call_to.continent
+  fields['de_ituzone'] = int(call_de.ituzone)
+  fields['to_ituzone'] = int(call_to.ituzone)
+  fields['de_cqzone'] = int(call_de.cqzone)
+  fields['to_cqzone'] = int(call_to.cqzone)
+  fields['mode'] = mode
   fields['signal'] = db_signal
 
   return DXSpotRecord(**fields)
@@ -484,7 +482,6 @@ class Cluster(Thread):
       except QFull:
         pass
 
-
   def run(self) -> None:
     LOG.info("Server: %s:%d", self.host, self.port)
     try:
@@ -603,7 +600,7 @@ def main():
       LOG.info('Running dxcluster version: %s', __version__)
       LOG.info('Clusters: %s', ', '.join(t.name for t in thread_list))
       try:
-        cache_info = Static.dxcc.get_prefix.cache_info() # ugly but it works.
+        cache_info = Static.dxcc.get_prefix.cache_info()  # ugly but it works.
         rate = 100 * cache_info.hits / (cache_info.misses + cache_info.hits)
         LOG.info("DXEntities cache %s -> %.2f%%", cache_info, rate)
       except AttributeError:

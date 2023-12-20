@@ -15,7 +15,6 @@ import marshal
 import os
 import plistlib
 import time
-
 from collections import defaultdict
 from functools import lru_cache
 from threading import Lock
@@ -30,6 +29,7 @@ CTY_EXPIRE = 86400 * 7          # One week
 
 LRU_CACHE_SIZE = 8192
 LOCK = Lock()
+
 
 class DXCCRecord:
   # pylint: disable=too-few-public-methods
@@ -90,7 +90,6 @@ class DXCC:
           cdb[key] = marshal.dumps(val)
           self._entities[val['Country']].add(key)
         cdb['_meta_data_'] = marshal.dumps([dict(self._entities), self._max_len])
-
 
   def lookup(self, call):
     # pylint: disable=method-hidden
