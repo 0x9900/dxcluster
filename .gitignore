@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.conf
+*.whl
 *.swp
 dxcluster.yaml
 alter_schema.sql

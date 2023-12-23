@@ -31,9 +31,10 @@ from telnetlib import Telnet
 from threading import Event, Thread
 from threading import enumerate as thread_enum
 
+from DXEntity import DXCC
+
 from dxcluster import __version__, adapters
 from dxcluster.config import Config
-from dxcluster.DXEntity import DXCC
 
 TELNET_RETRY = 3
 TELNET_TIMEOUT = 27
@@ -580,7 +581,7 @@ def make_queue(config):
 
 
 def main():
-  Static.dxcc = DXCC()
+  Static.dxcc = DXCC(cache_size=8192)
   config = Config()
   queue = make_queue(config)
   servers = config.servers
@@ -600,10 +601,10 @@ def main():
       LOG.info('Running dxcluster version: %s', __version__)
       LOG.info('Clusters: %s', ', '.join(t.name for t in thread_list))
       try:
-        cache_info = Static.dxcc.get_prefix.cache_info()  # ugly but it works.
+        cache_info = Static.dxcc.cache_info()  # ugly but it works.
         rate = 100 * cache_info.hits / (cache_info.misses + cache_info.hits)
         LOG.info("DXEntities cache %s -> %.2f%%", cache_info, rate)
-      except AttributeError:
+      except (AttributeError, ZeroDivisionError):
         LOG.info("The cache hasn't been initialized yet")
     elif _signum == signal.SIGINT:
       LOG.critical('Signal ^C received')
