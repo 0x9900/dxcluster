@@ -19,6 +19,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install pylint
         pip install PyYAML
+        pip install DXEntity
     - name: Analysing the code with pylint
       run: |
         pylint dxcluster/_dxcluster.py
