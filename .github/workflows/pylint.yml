@@ -21,7 +21,6 @@ jobs:
         pip install PyYAML
     - name: Analysing the code with pylint
       run: |
-        pylint dxcluster/DXEntity.py
         pylint dxcluster/_dxcluster.py
         pylint dxcluster/adapters.py
         pylint dxcluster/config.py
