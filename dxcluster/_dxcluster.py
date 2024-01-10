@@ -529,8 +529,7 @@ class QueueIterator:
   def __next__(self):
     if self.queue.empty():
       raise StopIteration
-    else:
-      return self.queue.get()
+    return self.queue.get()
 
 
 class SaveRecords(Thread):
