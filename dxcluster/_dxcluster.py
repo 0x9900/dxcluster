@@ -519,6 +519,20 @@ class Cluster(Thread):
     telnet.close()
 
 
+class QueueIterator:
+  def __init__(self, queue):
+    self.queue = queue
+
+  def __iter__(self):
+    return self
+
+  def __next__(self):
+    if self.queue.empty():
+      raise StopIteration
+    else:
+      return self.queue.get()
+
+
 class SaveRecords(Thread):
   def __init__(self, queue: Queue, db_name: str) -> None:
     super().__init__()
@@ -534,11 +548,9 @@ class SaveRecords(Thread):
 
   def read_queue(self):
     data = defaultdict(list)
-    count = 0
-    while self.queue.qsize():
-      table, record = self.queue.get()
+    q_iterator = QueueIterator(self.queue)
+    for count, (table, record) in enumerate(q_iterator, start=1):
       data[table].append(astuple(record))
-      count += 1
       if count >= 512:
         break
     return data
