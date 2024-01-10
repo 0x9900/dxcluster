@@ -302,7 +302,7 @@ def parse_spot(line: str) -> DXSpotRecord | None:
 
   for c_code in fields['de'].split('/', 1):
     try:
-      call_de = Static.dxcc.lookup(c_code)  # type: ignore
+      call_de = Static.dxcc.lookup(c_code)  # type: ignore # pylint: disable=no-member
       break
     except KeyError:
       pass
@@ -312,7 +312,7 @@ def parse_spot(line: str) -> DXSpotRecord | None:
 
   for c_code in fields['dx'].split('/', 1):
     try:
-      call_to = Static.dxcc.lookup(c_code)  # type: ignore
+      call_to = Static.dxcc.lookup(c_code)  # type: ignore # pylint: disable=no-member
       break
     except KeyError:
       pass
