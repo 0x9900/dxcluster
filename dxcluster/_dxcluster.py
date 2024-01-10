@@ -296,7 +296,7 @@ def parse_spot(line: str) -> DXSpotRecord | None:
       'dx': elem[2],
       'message': elem[3],
     })
-  except ValueError as err:
+  except (IndexError, ValueError) as err:
     LOG.warning("%s | %s", err, re.sub(r'[\n\r\t]+', ' ', line))
     return None
 
