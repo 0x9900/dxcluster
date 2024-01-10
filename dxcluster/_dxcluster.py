@@ -31,7 +31,7 @@ from telnetlib import Telnet
 from threading import Event, Thread
 from threading import enumerate as thread_enum
 
-from DXEntity import DXCC
+from DXEntity import DXCC, DXCCRecord
 
 from dxcluster import __version__, adapters
 from dxcluster.config import Config
@@ -237,7 +237,7 @@ def login(telnet: Telnet, call: str, email: str, timeout: int) -> None:
     raise OSError('Unknown cluster type')
   match_str = _match.group().lower()
   try:
-    LOG.info('%s:%d running %s', telnet.host, telnet.port, match_str)
+    LOG.info('%s:%d running %s', telnet.host, telnet.port, match_str)  # type: ignore
     set_options = clusters[match_str]
   except KeyError as exp:
     raise OSError('Unknown cluster type') from exp
@@ -272,7 +272,7 @@ class DXSpotRecord:
 
 class Static:
   # pylint: disable=too-few-public-methods
-  dxcc = None
+  dxcc = DXCCRecord
   spot_splitter = partial(re.compile(r'[:\s]+').split, maxsplit=5)
   msgparse = re.compile(
     r'(?P<mode>FT[48]|CW|RTTY|PSK[\d]*)\s+(?P<db>[+-]?\ ?\d+).*\s((?P<t_sig>\d{4}Z)|).*'
@@ -302,7 +302,7 @@ def parse_spot(line: str) -> DXSpotRecord | None:
 
   for c_code in fields['de'].split('/', 1):
     try:
-      call_de = Static.dxcc.lookup(c_code)
+      call_de = Static.dxcc.lookup(c_code)  # type: ignore
       break
     except KeyError:
       pass
@@ -312,7 +312,7 @@ def parse_spot(line: str) -> DXSpotRecord | None:
 
   for c_code in fields['dx'].split('/', 1):
     try:
-      call_to = Static.dxcc.lookup(c_code)
+      call_to = Static.dxcc.lookup(c_code)  # type: ignore
       break
     except KeyError:
       pass

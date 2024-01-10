@@ -27,6 +27,14 @@
   ]
   dynamic = ["version"]
 
+[project.optional-dependencies]
+dev = [
+    "pre-commit",
+    "ipdb"
+]
+
+
+
 [project.urls]
   Documentation = "https://github.com/0x9900/dxcluster/"
   Source = "https://github.com/0x9900/dxcluster"
