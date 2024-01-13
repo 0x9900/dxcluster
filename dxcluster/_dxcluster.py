@@ -565,8 +565,8 @@ class SaveRecords(Thread):
                     table, len(records), cursor.rowcount, len(records) - cursor.rowcount)
           break
         except sqlite3.OperationalError as err:
-          LOG.warning("Write error: %s, table: %s, Queue len: %d",
-                      err, table, self.queue.qsize())
+          LOG.warning("Write error: %s, table: %s, Queue len: %d/%d",
+                      err, table, self.queue.qsize(), self.queue.maxsize)
           time.sleep(1)
 
   def run(self):
@@ -585,9 +585,11 @@ class SaveRecords(Thread):
 
 def make_queue(config):
   if isinstance(config.queue_size, str) and config.queue_size.lower() == 'auto':
-    qsize = int(config.nb_threads * 2048 * 1.2)
+    _qsize = 512 * 5
   else:
-    qsize = config.queue_size
+    _qsize = config.queue_size
+
+  qsize = int(_qsize * config.nb_threads)
   return Queue(qsize)
 
 
