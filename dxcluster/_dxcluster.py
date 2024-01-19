@@ -565,7 +565,7 @@ class SaveRecords(Thread):
                     table, len(records), cursor.rowcount, len(records) - cursor.rowcount)
           break
         except sqlite3.OperationalError as err:
-          LOG.warning("Write error: %s, table: %s, Queue len: %d/%d",
+          LOG.warning("Write error: %s, table: %s, Queue len: %4d/%d",
                       err, table, self.queue.qsize(), self.queue.maxsize)
           time.sleep(1)
 
