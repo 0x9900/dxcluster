@@ -36,7 +36,8 @@ from DXEntity import DXCC, DXCCRecord
 from dxcluster import __version__, adapters
 from dxcluster.config import Config
 
-TELNET_RETRY = 3
+# TELNET_FAILURE is the number of time the connection is allowed to timeout.
+TELNET_FAILURE = 5
 TELNET_TIMEOUT = 27
 
 SQL_TABLE = """
@@ -490,7 +491,7 @@ class Cluster(Thread):
         login(telnet, self.call, self.email, self.timeout)
         LOG.info("Sucessful login into %s:%d", self.host, self.port)
 
-        retry = TELNET_RETRY
+        retry = TELNET_FAILURE
         while not self._stop.is_set() and retry:
           try:
             _line = telnet.read_until(b'\n', self.timeout)
@@ -506,16 +507,15 @@ class Cluster(Thread):
           elif line == r'^WCY de':
             self.process_wcy(line)
           elif line == r'^$':
-            LOG.warning('Nothing read from: %s retry: %d', self.host, 1 + TELNET_RETRY - retry)
+            LOG.warning('Nothing read from: %s retry: %d', self.host, 1 + TELNET_FAILURE - retry)
             retry -= 1
             continue
           else:
             LOG.debug("retry: %d, line %s", retry, line)
-          retry = TELNET_RETRY
     except (EOFError, OSError, TimeoutError, UnboundLocalError) as err:
       LOG.error(err)
       return
-    LOG.info('Thread finished closing telnet')
+    LOG.info('Thread finished closing telnet to: %s', self.host)
     telnet.close()
 
 
