@@ -33,8 +33,10 @@ from threading import enumerate as thread_enum
 
 from DXEntity import DXCC, DXCCRecord
 
-from dxcluster import __version__, adapters
-from dxcluster.config import Config
+from .adapters import install_adapters
+from .config import Config
+
+__version__ = "0.0.4"
 
 # TELNET_FAILURE is the number of time the connection is allowed to timeout.
 TELNET_FAILURE = 5
@@ -600,7 +602,7 @@ def main():
   servers = config.servers
   random.shuffle(servers)
   next_server = cycle(servers).__next__
-  adapters.install_adapters()
+  install_adapters()
   create_db(config.db_name)
   log_levels = cycle([logging.DEBUG, logging.INFO])
   LOG.info('Starting dxcluster version: %s', __version__)

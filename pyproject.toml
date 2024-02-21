@@ -44,7 +44,7 @@ dev = [
   purge_cluster = "dxcluster.purge_cluster:main"
 
 [tool.setuptools.dynamic]
-  version = { attr = "dxcluster.__version__" }
+  version = { attr = "dxcluster._dxcluster.__version__" }
 
 [tool.setuptools.packages.find]
   include = ["dxcluster*"]
