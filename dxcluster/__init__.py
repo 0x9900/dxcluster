@@ -6,6 +6,5 @@
 # LICENSE file in the root directory of this source tree.
 #
 #
-__version__ = "0.0.3"
 
 from dxcluster._dxcluster import *  # noqa: F401,F403
