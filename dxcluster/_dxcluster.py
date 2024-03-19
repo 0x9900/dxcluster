@@ -548,6 +548,8 @@ class SaveRecords(Thread):
     return not self._stop.is_set()
 
   def read_queue(self):
+    while self.queue.qsize() == 0:
+      time.sleep(1)
     data = defaultdict(list)
     q_iterator = QueueIterator(self.queue)
     for count, (table, record) in enumerate(q_iterator, start=1):
@@ -580,7 +582,6 @@ class SaveRecords(Thread):
             self.write(conn, table, records)
           except Exception as err:
             LOG.exception('Critical error %s', err)
-        time.sleep(.5)
 
     LOG.warning("SaveRecord thread stopped")
 
