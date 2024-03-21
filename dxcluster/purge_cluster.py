@@ -54,13 +54,17 @@ def main():
   delta = timedelta(hours=config.purge_time)
   purge_time = datetime.utcnow() - delta
 
+  try:
+    conn = sqlite3.connect(
+      config.db_name, timeout=5, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES
+    )
+    conn.isolation_level = None
+  except sqlite3.OperationalError as err:
+    logging.error(err)
+    return 1
+
   logging.info('Database: %s, timeout %d', config.db_name, config.db_timeout)
   logging.info('Delta: %0.1f days', delta.days)
-  conn = sqlite3.connect(
-    config.db_name, timeout=5, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES
-  )
-  conn.isolation_level = None
-
   try:
     purge(conn, purge_time)
   except sqlite3.OperationalError as err:
