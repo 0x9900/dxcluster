@@ -42,7 +42,7 @@ def purge(conn, purge_time):
       curs.execute('DELETE FROM dxspot WHERE time < ?;', (purge_time,))
       deleted = curs.rowcount
       curs.execute("COMMIT")
-      logging.info('%d record deleted in %f', deleted, ptime.elapse)
+    logging.info('%d record deleted in %f', deleted, ptime.elapse)
   except conn.error:
     curs.execute("ROLLBACK")
 
