@@ -9,6 +9,7 @@
 
 import logging
 import sqlite3
+import time
 from datetime import datetime, timedelta
 
 from .adapters import install_adapters
@@ -20,14 +21,28 @@ logging.basicConfig(
 )
 
 
+class Timer:
+  def __init__(self):
+    self.elapse = self.start = 0
+
+  def __enter__(self):
+    self.start = time.time()
+    return self
+
+  def __exit__(self, *args):
+    self.elapse = time.time() - self.start
+
+
 def purge(conn, purge_time):
   logging.info("Purge entries from before: %s", purge_time.isoformat())
   curs = conn.cursor()
   try:
-    curs.execute('BEGIN TRANSACTION')
-    curs.execute('DELETE FROM dxspot WHERE time < ?;', (purge_time,))
-    logging.info('%d record deleted', curs.rowcount)
-    curs.execute("COMMIT")
+    with Timer() as ptime:
+      curs.execute('BEGIN TRANSACTION')
+      curs.execute('DELETE FROM dxspot WHERE time < ?;', (purge_time,))
+      deleted = curs.rowcount
+      curs.execute("COMMIT")
+      logging.info('%d record deleted in %f', deleted, ptime.elapse)
   except conn.error:
     curs.execute("ROLLBACK")
 
