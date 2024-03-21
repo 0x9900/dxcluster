@@ -43,7 +43,8 @@ def purge(conn, purge_time):
       deleted = curs.rowcount
       curs.execute("COMMIT")
     logging.info('%d record deleted in %f', deleted, ptime.elapse)
-  except conn.error:
+  except sqlite3.OperationalError as err:
+    logging.error(err)
     curs.execute("ROLLBACK")
 
 
