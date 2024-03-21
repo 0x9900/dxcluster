@@ -61,7 +61,7 @@ def main():
     conn.isolation_level = None
   except sqlite3.OperationalError as err:
     logging.error(err)
-    return 1
+    raise SystemExit("Database error: exit") from None
 
   logging.info('Database: %s, timeout %d', config.db_name, config.db_timeout)
   logging.info('Delta: %0.1f days', delta.days)
