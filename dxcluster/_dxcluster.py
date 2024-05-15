@@ -21,7 +21,7 @@ import time
 import typing as t
 from collections import defaultdict
 from dataclasses import astuple, dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from functools import partial, wraps
 from itertools import cycle
@@ -270,7 +270,7 @@ class DXSpotRecord:
     if self.band is None:
       object.__setattr__(self, 'band', get_band(self.frequency))
     if self.time is None:
-      object.__setattr__(self, 'time', datetime.utcnow())
+      object.__setattr__(self, 'time', datetime.now(timezone.utc))
 
 
 class Static:
@@ -331,7 +331,7 @@ def parse_spot(line: str) -> DXSpotRecord | None:
   else:
     mode = db_signal = None
 
-  now = datetime.utcnow()
+  now = datetime.now(timezone.utc)
   if match and match.group('t_sig'):
     t_sig = match.group('t_sig')
     t_sig = now.replace(hour=int(t_sig[:2]), minute=int(t_sig[2:4]), second=0, microsecond=0)
@@ -362,7 +362,7 @@ class WWVRecord:
 
   def __post_init__(self):
     if self.time is None:
-      _curtime = datetime.utcnow().replace(microsecond=0)
+      _curtime = datetime.now(timezone.utc).replace(microsecond=0)
       object.__setattr__(self, 'time', _curtime)
 
 
@@ -405,7 +405,8 @@ class MessageRecord:
 
   def __post_init__(self):
     if self.timestamp is None:
-      object.__setattr__(self, 'timestamp', datetime.now().replace(microsecond=0))
+      _now = datetime.now(timezone.utc).replace(microsecond=0)
+      object.__setattr__(self, 'timestamp', _now)
 
 
 def parse_message(line: str) -> MessageRecord | None:

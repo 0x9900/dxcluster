@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 #
 # Copyright (c) 2023, Fred Cirera
 # All rights reserved.
@@ -10,7 +11,7 @@
 import logging
 import sqlite3
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from .adapters import install_adapters
 from .config import Config
@@ -52,7 +53,7 @@ def main():
   install_adapters()
   config = Config()
   delta = timedelta(hours=config.purge_time)
-  purge_time = datetime.utcnow() - delta
+  purge_time = datetime.now(timezone.utc) - delta
 
   try:
     conn = sqlite3.connect(
