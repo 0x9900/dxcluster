@@ -497,8 +497,9 @@ class Cluster(Thread):
         login(telnet, self.call, self.email, self.timeout)
         LOG.info("Sucessful login into %s:%d", self.host, self.port)
 
+        # Add a random time to avoid having all the servers disconnect simultaneously.
+        timer = Timer(TELNET_MAX_TIME + random.randint(0, 1800))
         retry = TELNET_FAILURE
-        timer = Timer(TELNET_MAX_TIME)
         while not self._stop.is_set() and retry and next(timer):
           try:
             _line = telnet.read_until(b'\n', self.timeout)
