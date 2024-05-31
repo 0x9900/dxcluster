@@ -38,9 +38,10 @@ from .config import Config
 
 __version__ = "0.0.4"
 
-# TELNET_FAILURE is the number of time the connection is allowed to timeout.
-TELNET_FAILURE = 5
 TELNET_TIMEOUT = 27
+# The maximum amount of time we stay connected to one server.
+TELNET_MAX_TIME = 3600 * 4
+
 
 SQL_TABLE = """
 PRAGMA synchronous = EXTRA;
@@ -494,14 +495,18 @@ class Cluster(Thread):
         login(telnet, self.call, self.email, self.timeout)
         LOG.info("Sucessful login into %s:%d", self.host, self.port)
 
-        retry = TELNET_FAILURE
-        while not self._stop.is_set() and retry:
+        # Add a random time to avoid having all the servers disconnect simultaneously.
+        timer = Timer(TELNET_MAX_TIME + random.randint(-1800, 1800))
+        while not self._stop.is_set() and next(timer):
           try:
             _line = telnet.read_until(b'\n', self.timeout)
             line = ReString(_line.decode('UTF-8', 'replace').rstrip())
           except EOFError:
             break
-          if line == r'^DX de':
+          if line == r'^$':
+            LOG.warning('Nothing read from: %s', self.host)
+            timer.reduce()
+          elif line == r'^DX de':
             self.process_spot(line)
           elif line == r'^WWV de':
             self.process_wwv(line)
@@ -509,17 +514,30 @@ class Cluster(Thread):
             self.process_message(line)
           elif line == r'^WCY de':
             self.process_wcy(line)
-          elif line == r'^$':
-            LOG.warning('Nothing read from: %s retry: %d', self.host, 1 + TELNET_FAILURE - retry)
-            retry -= 1
-            continue
-          else:
-            LOG.debug("retry: %d, line %s", retry, line)
+
     except (EOFError, OSError, TimeoutError, UnboundLocalError) as err:
-      LOG.error(err)
-      return
-    LOG.info('Thread finished closing telnet to: %s', self.host)
-    telnet.close()
+      LOG.error("%s - Error: %s", self.name, err)
+    except StopIteration:
+      LOG.info('Thread finished closing telnet to: %s', self.host)
+      telnet.close()
+
+
+class Timer:
+  def __init__(self, max_time):
+    self.cur_time = int(time.time())
+    self.max_time = self.cur_time + max_time
+
+  def __iter__(self):
+    return self
+
+  def reduce(self):
+    self.max_time /= 2
+
+  def __next__(self):
+    self.cur_time = int(time.time())
+    if self.cur_time > self.max_time:
+      raise StopIteration
+    return True
 
 
 class QueueIterator:
