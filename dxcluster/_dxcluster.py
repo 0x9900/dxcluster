@@ -42,7 +42,7 @@ __version__ = "0.0.4"
 TELNET_FAILURE = 3
 TELNET_TIMEOUT = 27
 # The maximum amount of time we stay connected to one server.
-TELNET_MAX_TIME = 3600 * 3
+TELNET_MAX_TIME = 3600 * 4
 
 
 SQL_TABLE = """
@@ -498,7 +498,7 @@ class Cluster(Thread):
         LOG.info("Sucessful login into %s:%d", self.host, self.port)
 
         # Add a random time to avoid having all the servers disconnect simultaneously.
-        timer = Timer(TELNET_MAX_TIME + random.randint(0, 1800))
+        timer = Timer(TELNET_MAX_TIME + random.randint(-1800, 1800))
         retry = TELNET_FAILURE
         while not self._stop.is_set() and retry and next(timer):
           try:
