@@ -36,7 +36,7 @@ from DXEntity import DXCC, DXCCRecord
 from .adapters import install_adapters
 from .config import Config
 
-__version__ = "0.0.4"
+__version__ = "0.0.5"
 
 TELNET_TIMEOUT = 27
 # The maximum amount of time we stay connected to one server.

@@ -29,6 +29,9 @@
 
 [project.optional-dependencies]
 dev = [
+    "pylint",
+    "isort",
+    "flake8",
     "pre-commit",
     "ipdb"
 ]
