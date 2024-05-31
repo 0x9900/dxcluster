@@ -505,7 +505,7 @@ class Cluster(Thread):
             break
           if line == r'^$':
             LOG.warning('Nothing read from: %s', self.host)
-            timer.decrease()
+            timer.reduce()
           elif line == r'^DX de':
             self.process_spot(line)
           elif line == r'^WWV de':
@@ -530,7 +530,7 @@ class Timer:
   def __iter__(self):
     return self
 
-  def decrease(self):
+  def reduce(self):
     self.max_time /= 2
 
   def __next__(self):
