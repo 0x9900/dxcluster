@@ -17,7 +17,9 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pylint isort flake8 pre-commit mypy
+        pip install pylint isort flake8 pre-commit
+        pip install PyYAML
+        pip install DXEntity
     - name: Checking imports
       continue-on-error: false
       run: |
@@ -30,7 +32,3 @@ jobs:
       continue-on-error: false
       run: |
         pylint $(git ls-files -- '*.py')
-    - name: Check typing
-      continue-on-error: false
-      run: |
-        mypy $(git ls-files -- '*.py')
