@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2023, Fred Cirera
+# Copyright (c) 2023-2024, Fred C.
 # All rights reserved.
 #
 # This source code is licensed under the BSD-style license found in the
@@ -11,6 +11,8 @@ import os
 
 import yaml
 
+# The maximum amount of time we stay connected to one server.
+TELNET_MAX_TIME = 3600 * 4
 TELNET_TIMEOUT = 27
 
 
@@ -60,6 +62,10 @@ class Config:
   @property
   def telnet_timeout(self):
     return self.config_data.get('telnet_timeout', TELNET_TIMEOUT)
+
+  @property
+  def telnet_max_time(self):
+    return self.config_data.get('telnet_max_time', TELNET_MAX_TIME)
 
   @property
   def servers(self):

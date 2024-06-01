@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright (c) 2023, Fred Cirera
+# Copyright (c) 2023-2024, Fred C.
 # All rights reserved.
 #
 # This source code is licensed under the BSD-style license found in the
@@ -34,13 +34,9 @@ from threading import enumerate as thread_enum
 from DXEntity import DXCC, DXCCRecord
 
 from .adapters import install_adapters
-from .config import Config
+from .config import TELNET_MAX_TIME, TELNET_TIMEOUT, Config
 
 __version__ = "0.0.5"
-
-TELNET_TIMEOUT = 27
-# The maximum amount of time we stay connected to one server.
-TELNET_MAX_TIME = 3600 * 4
 
 
 SQL_TABLE = """
@@ -452,6 +448,7 @@ class Cluster(Thread):
     self.email = email
     self._stop = Event()
     self.timeout = TELNET_TIMEOUT
+    self.maxtime = TELNET_MAX_TIME
 
   def stop(self) -> None:
     self._stop.set()
@@ -496,7 +493,7 @@ class Cluster(Thread):
         LOG.info("Sucessful login into %s:%d", self.host, self.port)
 
         # Add a random time to avoid having all the servers disconnect simultaneously.
-        timer = Timer(TELNET_MAX_TIME + random.randint(-1800, 1800))
+        timer = Timer(self.maxtime + random.randint(-1800, 1800))
         while not self._stop.is_set() and next(timer):
           try:
             _line = telnet.read_until(b'\n', self.timeout)
@@ -514,6 +511,8 @@ class Cluster(Thread):
             self.process_message(line)
           elif line == r'^WCY de':
             self.process_wcy(line)
+          else:
+            LOG.warning('Unprocessed line: %s', line)
 
     except (EOFError, OSError, TimeoutError, UnboundLocalError) as err:
       LOG.error("%s - Error: %s", self.name, err)
@@ -671,6 +670,7 @@ def main():
     th_cluster.name = name
     th_cluster.daemon = True
     th_cluster.timeout = config.telnet_timeout
+    th_cluster.maxtime = config.telnet_max_time
     th_cluster.start()
 
   # stopping all the telnet threads
