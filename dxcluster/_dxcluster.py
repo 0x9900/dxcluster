@@ -524,8 +524,7 @@ class Cluster(Thread):
 
 class Timer:
   def __init__(self, max_time):
-    self.cur_time = int(time.time())
-    self.max_time = self.cur_time + max_time
+    self.max_time = self.current_time + max_time
 
   def __iter__(self):
     return self
@@ -534,10 +533,13 @@ class Timer:
     self.max_time /= 2
 
   def __next__(self):
-    self.cur_time = int(time.time())
-    if self.cur_time > self.max_time:
+    if self.current_time > self.max_time:
       raise StopIteration
     return True
+
+  @property
+  def current_time(self):
+    return time.time()
 
 
 class QueueIterator:
