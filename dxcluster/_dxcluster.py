@@ -490,7 +490,7 @@ class Cluster(Thread):
     try:
       with Telnet(self.host, self.port, timeout=self.timeout) as telnet:
         login(telnet, self.call, self.email, self.timeout)
-        LOG.info("Sucessful login into %s:%d", self.host, self.port)
+        LOG.info("Successful login into %s:%d", self.host, self.port)
 
         # Add a random time to avoid having all the servers disconnect simultaneously.
         timer = Timer(self.maxtime + random.randint(-1800, 1800))
