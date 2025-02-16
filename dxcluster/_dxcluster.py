@@ -108,11 +108,19 @@ QUERIES = {
   """,
 }
 
-
 if sys.platform == 'linux':
   SIGINFO = signal.SIGUSR1		# pylint: disable=no-member
 else:
   SIGINFO = signal.SIGINFO		# pylint: disable=no-member
+
+SIGNALS = (
+  signal.SIGHUP,
+  SIGINFO,
+  signal.SIGUSR2,
+  signal.SIGINT,
+  signal.SIGQUIT,
+  signal.SIGTERM
+)
 
 if os.isatty(sys.stdout.fileno()):
   LOG_FORMAT = '%(asctime)s - %(threadName)s %(lineno)d %(levelname)s - %(message)s'
@@ -270,10 +278,13 @@ class DXSpotRecord:
       object.__setattr__(self, 'time', datetime.now(timezone.utc))
 
 
+@dataclass(slots=True)
 class Static:
   # pylint: disable=too-few-public-methods
   dxcc = DXCCRecord
   spot_splitter = partial(re.compile(r'[:\s]+').split, maxsplit=5)
+  start_time = 0
+  spot_counter = 0
   msgparse = (
     re.compile(
       r'(?P<mode>FT[48]|CW|RTTY)\s+(?P<db>[+-]?\ ?\d+).*\s((?P<t_sig>\d{4}Z)|).*'
@@ -596,6 +607,7 @@ class SaveRecords(Thread):
           cursor.executemany(command, records)
           LOG.debug("Table: %s, Data: %3d, row count: %3d: duplicates: %d",
                     table, len(records), cursor.rowcount, len(records) - cursor.rowcount)
+          Static.spot_counter += cursor.rowcount
           break
         except sqlite3.OperationalError as err:
           LOG.warning("Write error: %s, table: %s, Queue len: %4d/%d",
@@ -626,7 +638,9 @@ def make_queue(config):
 
 
 def main():
+  # pylint: disable=too-many-statements
   Static.dxcc = DXCC(cache_size=8192)
+  Static.start_time = datetime.now()
   config = Config()
   queue = make_queue(config)
   servers = config.servers
@@ -651,6 +665,13 @@ def main():
         LOG.info("DXEntities cache %s -> %.2f%%", cache_info, rate)
       except (AttributeError, ZeroDivisionError):
         LOG.info("The cache hasn't been initialized yet")
+    elif _signum == signal.SIGUSR2:
+      delta_time = (datetime.now() - Static.start_time).seconds / 60
+      if delta_time < 2:
+        LOG.warning('Not enough data to give a good estimate')
+      else:
+        spots_minutes = Static.spot_counter / delta_time
+        LOG.info('%d sports per minutes since %s', spots_minutes, Static.start_time)
     elif _signum == signal.SIGINT:
       LOG.critical('Signal ^C received')
       s_thread.stop()
@@ -664,7 +685,7 @@ def main():
   s_thread.start()
 
   LOG.info('Installing signal handlers')
-  for sig in (signal.SIGHUP, SIGINFO, signal.SIGINT, signal.SIGQUIT, signal.SIGTERM):
+  for sig in SIGNALS:
     signal.signal(sig, _sig_handler)
 
   # Monitor the running threads.
