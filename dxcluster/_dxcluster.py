@@ -447,7 +447,7 @@ class ReString(str):
 
 
 class Cluster(Thread):
-  # pylint: disable=too-many-instance-attributes
+  # pylint: disable=too-many-instance-attributes, too-many-positional-arguments
   def __init__(self, host: str, port: int, queue: Queue, call: str, email: str) -> None:
     super().__init__()
     self.host = host
