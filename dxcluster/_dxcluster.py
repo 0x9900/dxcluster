@@ -276,10 +276,10 @@ class Static:
   spot_splitter = partial(re.compile(r'[:\s]+').split, maxsplit=5)
   msgparse = (
     re.compile(
-      r'(?P<mode>FT[48]|CW|RTTY|PSK[\d]*)\s+(?P<db>[+-]?\ ?\d+).*\s((?P<t_sig>\d{4}Z)|).*'
+      r'(?P<mode>FT[48]|CW|RTTY)\s+(?P<db>[+-]?\ ?\d+).*\s((?P<t_sig>\d{4}Z)|).*'
     ).match,
     re.compile(
-      r'(?P<mode>SSB|USB|LSB|FT[48]|CW|RTTY|MFSK|OLIVIA|THOR|DOMINO|PSK[\d]*)',
+      r'(?P<mode>SSB|USB|LSB|FT[48]|CW|RTTY|MFSK|OLIVIA|THOR|DOMINO|PSK)(?:\d*)',
       re.IGNORECASE
     ).search,
   )
