@@ -326,8 +326,7 @@ def parse_spot(line: str) -> DXSpotRecord | None:
     LOG.debug("%s Not found | %s", fields['dx'], line)
     return None
 
-  now = datetime.now(timezone.utc)
-  t_sig = now.replace(second=0, microsecond=0)
+  t_sig = datetime.now(timezone.utc)
   db_signal = None
   mode = 'SSB'
   for parser in Static.msgparse:
@@ -337,9 +336,10 @@ def parse_spot(line: str) -> DXSpotRecord | None:
       db_signal = data.get('db', '').replace(' ', '')
       db_signal = None if not db_signal else int(db_signal)
       if sig := data.get('t_sig'):
-        t_sig = now.replace(hour=int(sig[:2]), minute=int(sig[2:4]), second=0, microsecond=0)
+        t_sig = t_sig.replace(hour=int(sig[:2]), minute=int(sig[2:4]))
       break
 
+  t_sig = t_sig.replace(minute=3 * int(t_sig.minute / 3), second=0, microsecond=0)
   if isinstance(mode, str):
     mode = mode.upper()
 
