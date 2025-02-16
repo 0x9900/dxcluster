@@ -274,9 +274,15 @@ class Static:
   # pylint: disable=too-few-public-methods
   dxcc = DXCCRecord
   spot_splitter = partial(re.compile(r'[:\s]+').split, maxsplit=5)
-  msgparse = re.compile(
-    r'(?P<mode>FT[48]|CW|RTTY|PSK[\d]*)\s+(?P<db>[+-]?\ ?\d+).*\s((?P<t_sig>\d{4}Z)|).*'
-  ).match
+  msgparse = (
+    re.compile(
+      r'(?P<mode>FT[48]|CW|RTTY|PSK[\d]*)\s+(?P<db>[+-]?\ ?\d+).*\s((?P<t_sig>\d{4}Z)|).*'
+    ).match,
+    re.compile(
+      r'(?P<mode>SSB|USB|LSB|FT[48]|CW|RTTY|MFSK|OLIVIA|THOR|DOMINO|PSK[\d]*)',
+      re.IGNORECASE
+    ).search,
+  )
 
 
 def parse_spot(line: str) -> DXSpotRecord | None:
@@ -320,20 +326,22 @@ def parse_spot(line: str) -> DXSpotRecord | None:
     LOG.debug("%s Not found | %s", fields['dx'], line)
     return None
 
-  match = Static.msgparse(fields['message'])
-  if match:
-    mode = match.group('mode')
-    db_signal = match.group('db')
-    db_signal = int(db_signal.replace(' ', ''))
-  else:
-    mode = db_signal = None
-
   now = datetime.now(timezone.utc)
-  if match and match.group('t_sig'):
-    t_sig = match.group('t_sig')
-    t_sig = now.replace(hour=int(t_sig[:2]), minute=int(t_sig[2:4]), second=0, microsecond=0)
-  else:
-    t_sig = now.replace(minute=0, second=0, microsecond=0)
+  t_sig = now.replace(second=0, microsecond=0)
+  db_signal = None
+  mode = 'SSB'
+  for parser in Static.msgparse:
+    if match := parser(fields['message']):
+      data = match.groupdict()
+      mode = data.get('mode')
+      db_signal = data.get('db', '').replace(' ', '')
+      db_signal = None if not db_signal else int(db_signal)
+      if sig := data.get('t_sig'):
+        t_sig = now.replace(hour=int(sig[:2]), minute=int(sig[2:4]), second=0, microsecond=0)
+      break
+
+  if isinstance(mode, str):
+    mode = mode.upper()
 
   fields['t_sig'] = t_sig
   fields['de_cont'] = call_de.continent
@@ -342,7 +350,8 @@ def parse_spot(line: str) -> DXSpotRecord | None:
   fields['to_ituzone'] = int(call_to.ituzone)
   fields['de_cqzone'] = int(call_de.cqzone)
   fields['to_cqzone'] = int(call_to.cqzone)
-  fields['mode'] = mode
+  fields['mode'] = 'SSB' if mode in ('LSB', 'USB') else mode
+
   fields['signal'] = db_signal
 
   return DXSpotRecord(**fields)
