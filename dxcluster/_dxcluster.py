@@ -671,7 +671,7 @@ def main():
         LOG.warning('Not enough data to give a good estimate')
       else:
         spots_minutes = Static.spot_counter / delta_time
-        LOG.info('%d sports per minutes since %s', spots_minutes, Static.start_time)
+        LOG.info('%d Spots/minutes since %s', spots_minutes, Static.start_time)
     elif _signum == signal.SIGINT:
       LOG.critical('Signal ^C received')
       s_thread.stop()
