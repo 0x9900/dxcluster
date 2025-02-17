@@ -109,14 +109,13 @@ QUERIES = {
 }
 
 if sys.platform == 'linux':
-  SIGINFO = signal.SIGUSR1		# pylint: disable=no-member
+  SIGINFO = signal.SIGUSR1		# Linux - pylint: disable=no-member
 else:
-  SIGINFO = signal.SIGINFO		# pylint: disable=no-member
+  SIGINFO = signal.SIGINFO		# Everyone else - pylint: disable=no-member
 
 SIGNALS = (
   signal.SIGHUP,
   SIGINFO,
-  signal.SIGUSR2,
   signal.SIGINT,
   signal.SIGQUIT,
   signal.SIGTERM
@@ -665,10 +664,9 @@ def main():
         LOG.info("DXEntities cache %s -> %.2f%%", cache_info, rate)
       except (AttributeError, ZeroDivisionError):
         LOG.info("The cache hasn't been initialized yet")
-    elif _signum == signal.SIGUSR2:
       delta_time = (datetime.now() - Static.start_time).seconds / 60
       if delta_time < 2:
-        LOG.warning('Not enough data to give a good estimate')
+        LOG.warning('Not enough data to give a good rate estimation')
       else:
         spots_minutes = Static.spot_counter / delta_time
         LOG.info('%d Spots/minutes since %s', spots_minutes, Static.start_time)
