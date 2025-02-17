@@ -661,7 +661,7 @@ def main():
       try:
         cache_info = Static.dxcc.cache_info()  # ugly but it works.
         rate = 100 * cache_info.hits / (cache_info.misses + cache_info.hits)
-        LOG.info("DXEntities cache %s -> %.2f%%", cache_info, rate)
+        LOG.info("DXEntities cache %s hit rate: %.2f%%", cache_info, rate)
       except (AttributeError, ZeroDivisionError):
         LOG.info("The cache hasn't been initialized yet")
       delta_time = (datetime.now() - Static.start_time).seconds / 60
