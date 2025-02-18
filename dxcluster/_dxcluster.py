@@ -108,18 +108,8 @@ QUERIES = {
   """,
 }
 
-if sys.platform == 'linux':
-  SIGINFO = signal.SIGUSR1		# Linux - pylint: disable=no-member
-else:
-  SIGINFO = signal.SIGINFO		# Everyone else - pylint: disable=no-member
-
-SIGNALS = (
-  signal.SIGHUP,
-  SIGINFO,
-  signal.SIGINT,
-  signal.SIGQUIT,
-  signal.SIGTERM
-)
+SIGNALS = (signal.SIGHUP, signal.SIGINT, signal.SIGQUIT, signal.SIGTERM,
+           signal.SIGUSR1, signal.SIGUSR2,)
 
 if os.isatty(sys.stdout.fileno()):
   LOG_FORMAT = '%(asctime)s - %(threadName)s %(lineno)d %(levelname)s - %(message)s'
@@ -231,7 +221,7 @@ def login(telnet: Telnet, call: str, email: str, timeout: int) -> None:
   try:
     for _ in range(5):
       buffer.append(telnet.read_very_eager())
-      time.sleep(0.25)
+      time.sleep(.25)
   except EOFError as err:
     raise OSError(f'{err}: {buffer}') from err
 
@@ -636,25 +626,27 @@ def make_queue(config):
   return Queue(qsize)
 
 
-def main():
-  # pylint: disable=too-many-statements
-  Static.dxcc = DXCC(cache_size=8192)
-  Static.start_time = datetime.now()
-  config = Config()
-  queue = make_queue(config)
-  servers = config.servers
-  random.shuffle(servers)
-  next_server = cycle(servers).__next__
-  install_adapters()
-  create_db(config.db_name)
-  log_levels = cycle([logging.DEBUG, logging.INFO])
-  LOG.info('Starting dxcluster version: %s', __version__)
+class SigHandler:
+  def __init__(self):
+    self.log_levels = cycle([logging.DEBUG, logging.INFO])
+    for sig in SIGNALS:
+      signal.signal(sig, self.handler)
 
-  def _sig_handler(_signum, _frame):
+  def get_level(self):
+    return next(self.log_levels)
+
+  def stop(self):
+    # stopping all the threads
+    for cth in thread_enum():
+      if any([isinstance(cth, Cluster), isinstance(cth, SaveRecords)]):
+        LOG.info('Stopping thread: %s', cth.name)
+        cth.stop()
+
+  def handler(self, _signum, _frame):
     if _signum == signal.SIGHUP:
-      LOG.setLevel(next(log_levels))
+      LOG.setLevel(self.get_level())
       LOG.warning('SIGHUP received, switching to %s', logging.getLevelName(LOG.level))
-    elif _signum == SIGINFO:
+    elif _signum == signal.SIGUSR1:
       thread_list = [t for t in thread_enum() if isinstance(t, Cluster)]
       LOG.info('Running dxcluster version: %s', __version__)
       LOG.info('Clusters: %s', ', '.join(t.name for t in thread_list))
@@ -670,12 +662,28 @@ def main():
       else:
         spots_minutes = Static.spot_counter / delta_time
         LOG.info('%d Spots/minutes since %s', spots_minutes, Static.start_time)
+    elif _signum == signal.SIGUSR2:
+      pass
     elif _signum == signal.SIGINT:
       LOG.critical('Signal ^C received')
-      s_thread.stop()
+      self.stop()
     elif _signum in (signal.SIGQUIT, signal.SIGTERM):
       LOG.info('Quitting')
-      s_thread.stop()
+      self.stop()
+
+
+def main():
+  # pylint: disable=too-many-statements
+  Static.dxcc = DXCC(cache_size=8192)
+  Static.start_time = datetime.now()
+  config = Config()
+  queue = make_queue(config)
+  servers = config.servers
+  random.shuffle(servers)
+  next_server = cycle(servers).__next__
+  install_adapters()
+  create_db(config.db_name)
+  LOG.info('Starting dxcluster version: %s', __version__)
 
   s_thread = SaveRecords(queue, config.db_name)
   s_thread.name = 'SaveRecords'
@@ -683,15 +691,14 @@ def main():
   s_thread.start()
 
   LOG.info('Installing signal handlers')
-  for sig in SIGNALS:
-    signal.signal(sig, _sig_handler)
+  SigHandler()
 
   # Monitor the running threads.
   # Restart reconnect to a different cluster if a cluster thread dies.
   while s_thread.running():
     thread_list = [t for t in thread_enum() if isinstance(t, Cluster)]
     if len(thread_list) >= config.nb_threads:
-      time.sleep(3)
+      time.sleep(5)
       continue
     name, host, port = next_server()
     th_cluster = Cluster(host, port, queue, config.call, config.email)
@@ -700,12 +707,6 @@ def main():
     th_cluster.timeout = config.telnet_timeout
     th_cluster.maxtime = config.telnet_max_time
     th_cluster.start()
-
-  # stopping all the telnet threads
-  for cth in (c for c in thread_enum() if isinstance(c, Cluster)):
-    LOG.info('Stopping thread: %s', cth.name)
-    cth.stop()
-  s_thread.stop()
 
 
 if __name__ == "__main__":
