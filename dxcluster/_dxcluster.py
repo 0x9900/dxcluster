@@ -12,6 +12,7 @@
 
 import logging
 import os
+import pickle
 import random
 import re
 import signal
@@ -270,13 +271,59 @@ class DXSpotRecord:
       object.__setattr__(self, 'time', datetime.now(timezone.utc))
 
 
+class FixSizeKVStore:
+  def __init__(self, max_size):
+    self.max_size = max_size
+    self.items = {}  # Store the values
+    self.key_order = []  # Keep track of insertion order
+
+  def put(self, key, value):
+    if key not in self:
+      # If at capacity, remove oldest item
+      if len(self.items) >= self.max_size:
+        oldest_key = self.key_order.pop(0)
+        del self.items[oldest_key]
+        print(oldest_key)
+      self.key_order.append(key)
+
+    self.items[key] = value
+    return value
+
+  def incr(self, key, increment=1):
+    curr = self.get(key) if key in self else 0
+    if not isinstance(curr, int):
+      raise ValueError('incr error: the stored value is not an int')
+    self.put(key, curr + increment)
+
+  def get(self, key, default=None):
+    return self.items.get(key, default)
+
+  def modify(self, key, modifier_func):
+    if key not in self:
+      return None
+    self.items[key] = modifier_func(self.items[key])
+    return self.items[key]
+
+  def get_all(self):
+    return [(key, self.items[key]) for key in self.key_order]
+
+  def __len__(self):
+    return len(self.items)
+
+  def __contains__(self, key):
+    return key in self.items
+
+  def last(self):
+    key = self.key_order[-1]
+    return key, self.items[self.key_order[-1]]
+
+
 @dataclass(slots=True)
 class Static:
   # pylint: disable=too-few-public-methods
   dxcc = DXCCRecord
   spot_splitter = partial(re.compile(r'[:\s]+').split, maxsplit=5)
-  start_time = 0
-  spot_counter = 0
+  spot_stats = FixSizeKVStore(24)
   msgparse = (
     re.compile(
       r'(?P<mode>FT[48]|CW|RTTY)\s+(?P<db>[+-]?\ ?\d+).*\s((?P<t_sig>\d{4}Z)|).*'
@@ -599,7 +646,8 @@ class SaveRecords(Thread):
           cursor.executemany(command, records)
           LOG.debug("Table: %s, Data: %3d, row count: %3d: duplicates: %d",
                     table, len(records), cursor.rowcount, len(records) - cursor.rowcount)
-          Static.spot_counter += cursor.rowcount
+          stat_time = datetime.now().replace(minute=0, second=0, microsecond=0)
+          Static.spot_stats.incr(stat_time, cursor.rowcount)
           break
         except sqlite3.OperationalError as err:
           LOG.warning("Write error: %s, table: %s, Queue len: %4d/%d",
@@ -659,14 +707,14 @@ class SigHandler:
         LOG.info("DXEntities cache %s hit rate: %.2f%%", cache_info, rate)
       except (AttributeError, ZeroDivisionError):
         LOG.info("The cache hasn't been initialized yet")
-      delta_time = (datetime.now() - Static.start_time).seconds / 60
-      if delta_time < 2:
-        LOG.warning('Not enough data to give a good rate estimation')
-      else:
-        spots_minutes = Static.spot_counter / delta_time
-        LOG.info('%d Spots/minutes since %s', spots_minutes, Static.start_time)
+      now = datetime.now()
+      start, counter = Static.spot_stats.last()
+      minutes = (now - start).seconds / 60
+      LOG.info('Spots rate %d / minutes starting %s', counter / minutes, start)
     elif _signum == signal.SIGUSR2:
-      pass
+      LOG.info('Writting stat file into /tmp/dxcluster-stats.pkl')
+      with open('/tmp/dxcluster-stats.pkl', 'wb') as fds:
+        fds.write(pickle.dumps(Static.spot_stats.get_all()))
     elif _signum == signal.SIGINT:
       LOG.critical('Signal ^C received')
       self.stop()
@@ -678,7 +726,6 @@ class SigHandler:
 def main():
   # pylint: disable=too-many-statements
   Static.dxcc = DXCC(cache_size=8192)
-  Static.start_time = datetime.now()
   config = Config()
   queue = make_queue(config)
   servers = config.servers
