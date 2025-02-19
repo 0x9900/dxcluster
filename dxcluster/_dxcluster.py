@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS dxspot (
   frequency NUMERIC,
   dx TEXT,
   message TEXT,
-  t_sig, TIMESTAMP,
+  t_sig TIMESTAMP,
   de_cont TEXT,
   to_cont TEXT,
   de_ituzone INTEGER,
@@ -211,7 +211,10 @@ def login(telnet: Telnet, call: str, email: str, timeout: int) -> None:
   }
   re_spider = re.compile(rf'({"|".join(clusters.keys())})', re.IGNORECASE)
   buffer = []
-  expect_exp = [b'your call:', b'login:']
+  expect_exp: t.Sequence[t.Pattern[bytes]] = [
+    re.compile(rb'your call:'),
+    re.compile(rb'login:')
+  ]
 
   code, _, match = telnet.expect(expect_exp, timeout)
   if code == -1:
@@ -328,7 +331,7 @@ def parse_spot(line: str) -> DXSpotRecord | None:
 
   t_sig = datetime.now(timezone.utc)
   db_signal = None
-  mode = 'SSB'
+  mode: str | None = 'SSB'
   for parser in Static.msgparse:
     if match := parser(fields['message']):
       data = match.groupdict()
