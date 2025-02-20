@@ -37,7 +37,7 @@ from DXEntity import DXCC, DXCCRecord
 from .adapters import install_adapters
 from .config import TELNET_MAX_TIME, TELNET_TIMEOUT, Config
 
-__version__ = "0.0.5"
+__version__ = "0.1.0"
 
 
 SQL_TABLE = """
@@ -87,37 +87,30 @@ DETECT_TYPES = sqlite3.PARSE_DECLTYPES
 
 
 class Tables(Enum):
-  DXSPOT = 1
-  WWV = 2
-  MESSAGE = 3
-
-
-QUERIES = {
-  Tables.DXSPOT: """
-  INSERT OR IGNORE INTO dxspot
+  DXSPOT = """
+    INSERT OR IGNORE INTO dxspot
     (de, frequency, dx, message, t_sig, de_cont, to_cont, de_ituzone,
     to_ituzone, de_cqzone, to_cqzone, mode, signal, band, time)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  """,
-  Tables.WWV: """
-  INSERT OR IGNORE  INTO wwv (SFI, A, K, conditions, time)
-  VALUES (?, ?, ?, ?, ?)
-  """,
-  Tables.MESSAGE: """
-  INSERT OR IGNORE INTO messages (de, time, message, timestamp)
-  VALUES (?, ?, ?, ?)
-  """,
-}
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+
+  WWV = """
+    INSERT OR IGNORE INTO wwv (SFI, A, K, conditions, time)
+    VALUES (?, ?, ?, ?, ?)"""
+
+  MESSAGE = """
+    INSERT OR IGNORE INTO messages (de, time, message, timestamp)
+    VALUES (?, ?, ?, ?)"""
+
 
 SIGNALS = (signal.SIGHUP, signal.SIGINT, signal.SIGQUIT, signal.SIGTERM,
            signal.SIGUSR1, signal.SIGUSR2,)
 
 if os.isatty(sys.stdout.fileno()):
-  LOG_FORMAT = '%(asctime)s - %(threadName)s %(lineno)d %(levelname)s - %(message)s'
+  LOG_FORMAT = '%(asctime)s - %(threadName)-10s %(lineno)4d %(levelname)-8s - %(message)s'
 else:
-  LOG_FORMAT = '%(threadName)s %(lineno)d %(levelname)s - %(message)s'
+  LOG_FORMAT = '%(threadName)-10s %(lineno)4d %(levelname)-8s - %(message)s'
 
-logging.basicConfig(format=LOG_FORMAT, datefmt='%x %X', level=logging.INFO)
+logging.basicConfig(format=LOG_FORMAT, datefmt='%X', level=logging.INFO)
 LOG = logging.getLogger('dxcluster')
 
 
@@ -638,12 +631,11 @@ class SaveRecords(Thread):
     return data
 
   def write(self, conn: sqlite3.Connection, table: Tables, records: list[tuple]) -> None:
-    command = QUERIES[table]
     with conn:
       cursor = conn.cursor()
       while True:
         try:
-          cursor.executemany(command, records)
+          cursor.executemany(table.value, records)
           LOG.debug("Table: %s, Data: %3d, row count: %3d: duplicates: %d",
                     table, len(records), cursor.rowcount, len(records) - cursor.rowcount)
           stat_time = datetime.now().replace(minute=0, second=0, microsecond=0)
@@ -693,7 +685,13 @@ class SigHandler:
         LOG.info('Stopping thread: %s', cth.name)
         cth.stop()
 
-  def handler(self, _signum, _frame):
+  def handler(self, signum, frame):
+    try:
+      self._handler(signum, frame)
+    except IndexError:
+      LOG.error('The cluster threads haven\'t starte to write yet')
+
+  def _handler(self, _signum, _frame):
     if _signum == signal.SIGHUP:
       LOG.setLevel(self.get_level())
       LOG.warning('SIGHUP received, switching to %s', logging.getLevelName(LOG.level))
@@ -710,7 +708,8 @@ class SigHandler:
       now = datetime.now()
       start, counter = Static.spot_stats.last()
       minutes = (now - start).seconds / 60
-      LOG.info('Spots rate %d / minutes starting %s', counter / minutes, start)
+      rate = counter / minutes if minutes > 1 else 0  # Zero divide risk
+      LOG.info('Spots rate %d/minute starting %s', counter / minutes, start)
     elif _signum == signal.SIGUSR2:
       LOG.info('Writting stat file into /tmp/dxcluster-stats.pkl')
       with open('/tmp/dxcluster-stats.pkl', 'wb') as fds:
@@ -736,7 +735,7 @@ def main():
   LOG.info('Starting dxcluster version: %s', __version__)
 
   s_thread = SaveRecords(queue, config.db_name)
-  s_thread.name = 'SaveRecords'
+  s_thread.name = 'SaveRecs'
   s_thread.daemon = True
   s_thread.start()
 

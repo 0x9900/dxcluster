@@ -7,13 +7,21 @@
 #
 #
 
+import logging
 import os
+from pathlib import Path
 
 import yaml
 
 # The maximum amount of time we stay connected to one server.
 TELNET_MAX_TIME = 3600 * 4
 TELNET_TIMEOUT = 27
+
+LOG = logging.getLogger('config')
+
+
+class ConfigError(Exception):
+  pass
 
 
 class Config:
@@ -28,8 +36,38 @@ class Config:
     return cls._instance
 
   def __init__(self):
-    if not self.config_data:
-      self.config_data = Config.read_config()
+    if self.config_data:
+      return
+
+    self.config_data = Config.read_config()
+    if 'servers' not in self.config_data:
+      raise ConfigError('Configuration error: "servers" key is missing')
+
+    if isinstance(self.config_data['servers'], list):
+      return
+
+    server_file = Path(self.config_data['servers'])
+    self.config_data['servers'] = self.read_servers(server_file)
+    if len(self.config_data['servers']) < 1:
+      raise ConfigError('Configuration error: server list empty')
+
+  @staticmethod
+  def read_servers(server_file):
+    if not server_file.exists():
+      raise FileNotFoundError(f'File "{server_file}" not found')
+    server_list = []
+    with server_file.open('r', encoding="utf-8") as fds:
+      for line in (ln.strip() for ln in fds if not ln.startswith('#')):
+        fields = [f.strip() for f in line.split(',')]
+        if len(fields) != 4:
+          LOG.warning('Incorrect number of fields: %s', line)
+          continue
+        try:
+          server_list.append([fields[0], fields[1], int(fields[2])])
+        except ValueError:
+          LOG.warning('Server entry error: %s', line)
+
+    return server_list
 
   @staticmethod
   def read_config():
