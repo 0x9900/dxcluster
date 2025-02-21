@@ -40,6 +40,12 @@ from .config import TELNET_MAX_TIME, TELNET_TIMEOUT, Config
 __version__ = "0.1.0"
 
 
+TRANSLATOR = ''.maketrans(
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+  'abcdefghijklmnopqrstuvwxyz',
+  '!"#$%&\'()*+,-/:;<=>?@[\\]^_`{|}~'
+)
+
 SQL_TABLE = """
 PRAGMA synchronous = EXTRA;
 PRAGMA journal_mode = WAL;
@@ -196,33 +202,48 @@ def cc_options(telnet: Telnet, _: str) -> None:
     time.sleep(.25)
 
 
+def sk_options(telnet: Telnet, _: str) -> None:
+  pass
+
+
 def login(telnet: Telnet, call: str, email: str, timeout: int) -> None:
   # pylint: disable=too-many-locals
   clusters = {
     "running cc cluster": cc_options,
     "ar-cluster": ar_options,
     "running dxspider": dxspider_options,
+    "dxspider V1": dxspider_options,
+    "dxspider ": dxspider_options,
+    "current spot rate": sk_options,
   }
   re_spider = re.compile(rf'({"|".join(clusters.keys())})', re.IGNORECASE)
   buffer = []
   expect_exp: t.Sequence[t.Pattern[bytes]] = [
     re.compile(rb'your call:'),
+    re.compile(rb'your callsign:'),
     re.compile(rb'login:')
   ]
 
   code, _, match = telnet.expect(expect_exp, timeout)
   if code == -1:
     raise OSError('No login prompt found') from None
-  buffer.append(match)
+  buffer.append(match.decode('UTF-8', 'replace'))
   telnet.write(str.encode(f'{call}\n'))
   try:
     for _ in range(5):
-      buffer.append(telnet.read_very_eager())
-      time.sleep(.25)
+      response = telnet.read_very_eager()
+      for line in response.splitlines():
+        line = line.decode('UTF-8', 'replace')
+        line = line.translate(TRANSLATOR).strip()
+        if line:
+          buffer.append(line)
+      time.sleep(1)
+    s_buffer = ' '.join(buffer)
   except EOFError as err:
-    raise OSError(f'{err}: {buffer}') from err
-
-  s_buffer = b'\n'.join(buffer).decode('UTF-8', 'replace')
+    s_buffer = ' '.join(buffer)
+    if 'already connected' in s_buffer:
+      raise OSError(f'{err}: {telnet.host} - already connected') from err
+    raise OSError(f'{err}: {telnet.host}') from err
 
   if 'invalid callsign' in s_buffer:
     raise OSError('invalid callsign')
@@ -231,7 +252,7 @@ def login(telnet: Telnet, call: str, email: str, timeout: int) -> None:
     raise OSError('Unknown cluster type')
   match_str = _match.group().lower()
   try:
-    LOG.info('%s:%d running %s', telnet.host, telnet.port, match_str)  # type: ignore
+    LOG.info('%s:%d %s', telnet.host, telnet.port, match_str)  # type: ignore
     set_options = clusters[match_str]
   except KeyError as exp:
     raise OSError('Unknown cluster type') from exp
@@ -276,7 +297,6 @@ class FixSizeKVStore:
       if len(self.items) >= self.max_size:
         oldest_key = self.key_order.pop(0)
         del self.items[oldest_key]
-        print(oldest_key)
       self.key_order.append(key)
 
     self.items[key] = value
@@ -565,7 +585,6 @@ class Cluster(Thread):
             self.process_wcy(line)
           else:
             LOG.warning('Unprocessed line: %s', line)
-
     except (EOFError, OSError, TimeoutError, UnboundLocalError) as err:
       LOG.error("%s - Error: %s", self.name, err)
     except StopIteration:
