@@ -202,7 +202,7 @@ def cc_options(telnet: Telnet, _: str) -> None:
     time.sleep(.25)
 
 
-def sk_options(telnet: Telnet, _: str) -> None:
+def sk_options(_1: Telnet, _2: str) -> None:
   pass
 
 
