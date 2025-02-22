@@ -12,7 +12,6 @@
 
 import logging
 import os
-import pickle
 import random
 import re
 import signal
@@ -35,7 +34,7 @@ from threading import enumerate as thread_enum
 from DXEntity import DXCC, DXCCRecord
 
 from .adapters import install_adapters
-from .config import TELNET_MAX_TIME, TELNET_TIMEOUT, Config
+from .config import Config, ConfigError
 
 __version__ = "0.1.0"
 
@@ -519,8 +518,8 @@ class Cluster(Thread):
     self.call = call
     self.email = email
     self._stop = Event()
-    self.timeout = TELNET_TIMEOUT
-    self.maxtime = TELNET_MAX_TIME
+    self.timeout = 0
+    self.maxtime = 0
 
   def stop(self) -> None:
     self._stop.set()
@@ -708,7 +707,7 @@ class SigHandler:
     try:
       self._handler(signum, frame)
     except IndexError:
-      LOG.error('The cluster threads haven\'t starte to write yet')
+      LOG.error('The cluster threads haven\'t started to write yet')
 
   def _handler(self, _signum, _frame):
     if _signum == signal.SIGHUP:
@@ -731,8 +730,10 @@ class SigHandler:
       LOG.info('Spots rate %d/minute starting %s', counter / minutes, start)
     elif _signum == signal.SIGUSR2:
       LOG.info('Writting stat file into /tmp/dxcluster-stats.pkl')
-      with open('/tmp/dxcluster-stats.pkl', 'wb') as fds:
-        fds.write(pickle.dumps(Static.spot_stats.get_all()))
+      with open('/tmp/dxcluster-stats.csv', 'w', encoding='utf-8') as fds:
+        for row in Static.spot_stats.get_all():
+          line = ', '.join(str(f) for f in row)
+          fds.write(line + '\n')
     elif _signum == signal.SIGINT:
       LOG.critical('Signal ^C received')
       self.stop()
@@ -743,8 +744,12 @@ class SigHandler:
 
 def main():
   # pylint: disable=too-many-statements
+  try:
+    config = Config()
+  except ConfigError as err:
+    LOG.error(err)
+    return
   Static.dxcc = DXCC(cache_size=8192)
-  config = Config()
   queue = make_queue(config)
   servers = config.servers
   random.shuffle(servers)

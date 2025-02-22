@@ -47,14 +47,15 @@ class Config:
       return
 
     server_file = Path(self.config_data['servers'])
+    if not server_file.exists():
+      raise ConfigError(f'Servers file "{server_file}" not found')
+
     self.config_data['servers'] = self.read_servers(server_file)
     if len(self.config_data['servers']) < 1:
       raise ConfigError('Configuration error: server list empty')
 
   @staticmethod
   def read_servers(server_file):
-    if not server_file.exists():
-      raise FileNotFoundError(f'File "{server_file}" not found')
     server_list = []
     with server_file.open('r', encoding="utf-8") as fds:
       for line in (ln.strip() for ln in fds if not ln.startswith('#')):
