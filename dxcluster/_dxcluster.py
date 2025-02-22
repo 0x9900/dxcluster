@@ -19,7 +19,7 @@ import sqlite3
 import sys
 import time
 import typing as t
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from dataclasses import astuple, dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -28,7 +28,7 @@ from itertools import cycle
 from queue import Full as QFull
 from queue import Queue
 from telnetlib import Telnet
-from threading import Event, Thread
+from threading import Event, Lock, Thread
 from threading import enumerate as thread_enum
 
 from DXEntity import DXCC, DXCCRecord
@@ -38,6 +38,8 @@ from .config import Config, ConfigError
 
 __version__ = "0.1.0"
 
+
+STAT_FILENAME = '/tmp/dxcluser-stats.csv'
 
 TRANSLATOR = ''.maketrans(
   'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
@@ -287,18 +289,14 @@ class DXSpotRecord:
 class FixSizeKVStore:
   def __init__(self, max_size):
     self.max_size = max_size
-    self.items = {}  # Store the values
-    self.key_order = []  # Keep track of insertion order
+    self.data = OrderedDict()
+    self.lock = Lock()
 
   def put(self, key, value):
-    if key not in self:
-      # If at capacity, remove oldest item
-      if len(self.items) >= self.max_size:
-        oldest_key = self.key_order.pop(0)
-        del self.items[oldest_key]
-      self.key_order.append(key)
-
-    self.items[key] = value
+    with self.lock:
+      if key not in self and len(self.data) >= self.max_size:
+        self.data.popitem(last=False)
+      self.data[key] = value
     return value
 
   def incr(self, key, increment=1):
@@ -308,26 +306,19 @@ class FixSizeKVStore:
     self.put(key, curr + increment)
 
   def get(self, key, default=None):
-    return self.items.get(key, default)
-
-  def modify(self, key, modifier_func):
-    if key not in self:
-      return None
-    self.items[key] = modifier_func(self.items[key])
-    return self.items[key]
+    return self.data.get(key, default)
 
   def get_all(self):
-    return [(key, self.items[key]) for key in self.key_order]
+    return self.data.items()
 
   def __len__(self):
-    return len(self.items)
+    return len(self.data)
 
   def __contains__(self, key):
-    return key in self.items
+    return key in self.data
 
   def last(self):
-    key = self.key_order[-1]
-    return key, self.items[self.key_order[-1]]
+    return list(self.data.items())[-1]
 
 
 @dataclass(slots=True)
@@ -729,8 +720,8 @@ class SigHandler:
       rate = counter / minutes if minutes > 1 else 0  # Zero divide risk
       LOG.info('Spots rate %d/minute starting %s', counter / minutes, start)
     elif _signum == signal.SIGUSR2:
-      LOG.info('Writting stat file into /tmp/dxcluster-stats.pkl')
-      with open('/tmp/dxcluster-stats.csv', 'w', encoding='utf-8') as fds:
+      LOG.info('Writing stat file into %s', STAT_FILENAME)
+      with open(STAT_FILENAME, 'w', encoding='utf-8') as fds:
         for row in Static.spot_stats.get_all():
           line = ', '.join(str(f) for f in row)
           fds.write(line + '\n')
