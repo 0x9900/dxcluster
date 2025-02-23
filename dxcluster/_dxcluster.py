@@ -695,6 +695,13 @@ class SigHandler:
         LOG.info('Stopping thread: %s', cth.name)
         cth.stop()
 
+  def spot_stats(self):
+    now = datetime.now()
+    start, counter = Static.spot_stats.last()
+    minutes = (now - start).seconds / 60
+    rate = counter / minutes if minutes > 1 else 0  # Zero divide risk
+    LOG.info('Spots rate %d/minute starting %s', rate, start)
+
   def handler(self, signum, frame):
     try:
       self._handler(signum, frame)
@@ -715,12 +722,9 @@ class SigHandler:
         LOG.info("DXEntities cache %s hit rate: %.2f%%", cache_info, rate)
       except (AttributeError, ZeroDivisionError):
         LOG.info("The cache hasn't been initialized yet")
-      now = datetime.now()
-      start, counter = Static.spot_stats.last()
-      minutes = (now - start).seconds / 60
-      rate = counter / minutes if minutes > 1 else 0  # Zero divide risk
-      LOG.info('Spots rate %d/minute starting %s', counter / minutes, start)
+      self.spot_stats()
     elif _signum == signal.SIGUSR2:
+      self.spot_stats()
       LOG.info('Writing stat file into %s', STAT_FILENAME)
       fields = ['DateTime', 'Count']
       with open(STAT_FILENAME, 'w', encoding='utf-8') as fds:
