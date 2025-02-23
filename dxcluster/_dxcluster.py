@@ -10,6 +10,7 @@
 #
 # pylint: disable=unsupported-binary-operation,too-many-arguments
 
+import csv
 import logging
 import os
 import random
@@ -36,7 +37,7 @@ from DXEntity import DXCC, DXCCRecord
 from .adapters import install_adapters
 from .config import Config, ConfigError
 
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 
 
 STAT_FILENAME = '/tmp/dxcluser-stats.csv'
@@ -721,10 +722,12 @@ class SigHandler:
       LOG.info('Spots rate %d/minute starting %s', counter / minutes, start)
     elif _signum == signal.SIGUSR2:
       LOG.info('Writing stat file into %s', STAT_FILENAME)
+      fields = ['DateTime', 'Count']
       with open(STAT_FILENAME, 'w', encoding='utf-8') as fds:
-        for row in Static.spot_stats.get_all():
-          line = ', '.join(str(f) for f in row)
-          fds.write(line + '\n')
+        csvwriter = csv.writer(fds)
+        csvwriter.writerow(fields)
+        for date, count in Static.spot_stats.get_all():
+          csvwriter.writerow([date.isoformat(), count])
     elif _signum == signal.SIGINT:
       LOG.critical('Signal ^C received')
       self.stop()
