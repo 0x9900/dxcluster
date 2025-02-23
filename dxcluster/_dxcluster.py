@@ -40,7 +40,7 @@ from .config import Config, ConfigError
 __version__ = "0.1.2"
 
 
-STAT_FILENAME = '/tmp/dxcluser-stats.csv'
+STAT_FILENAME = '/tmp/dxcluster-stats.csv'
 
 TRANSLATOR = ''.maketrans(
   'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
