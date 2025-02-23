@@ -18,3 +18,9 @@ repos:
     rev: 4.0.1
     hooks:
       - id: flake8
+  - repo: local
+    hooks:
+      - id: version-check
+        name: Check version increment
+        entry: check_project_version
+        language: system

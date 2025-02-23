@@ -37,7 +37,7 @@ from DXEntity import DXCC, DXCCRecord
 from .adapters import install_adapters
 from .config import Config, ConfigError
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 
 STAT_FILENAME = '/tmp/dxcluster-stats.csv'
