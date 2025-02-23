@@ -24,3 +24,5 @@ repos:
         name: Check version increment
         entry: check_project_version
         language: system
+        pass_filenames: false
+        always_run: true
