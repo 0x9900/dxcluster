@@ -26,3 +26,8 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+  - repo: https://github.com/PyCQA/pylint
+    rev: v3.3.2
+    hooks:
+      - id: pylint
+        additional_dependencies: ['DXEntity', 'PyYAML']

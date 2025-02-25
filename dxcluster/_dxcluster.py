@@ -37,9 +37,10 @@ from DXEntity import DXCC, DXCCRecord
 from .adapters import install_adapters
 from .config import Config, ConfigError
 
-__version__ = "0.1.4"
+__version__ = "0.1.5"
 
 
+CLUSTER_STATS_HOURS = 96  # Number of hours for spots stats
 STAT_FILENAME = '/tmp/dxcluster-stats.csv'
 
 TRANSLATOR = ''.maketrans(
@@ -327,7 +328,7 @@ class Static:
   # pylint: disable=too-few-public-methods
   dxcc = DXCCRecord
   spot_splitter = partial(re.compile(r'[:\s]+').split, maxsplit=5)
-  spot_stats = FixSizeKVStore(24)
+  spot_stats = FixSizeKVStore(CLUSTER_STATS_HOURS)
   msgparse = (
     re.compile(
       r'(?P<mode>FT[48]|CW|RTTY)\s+(?P<db>[+-]?\ ?\d+).*\s((?P<t_sig>\d{4}Z)|).*'
