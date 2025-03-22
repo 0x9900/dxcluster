@@ -37,7 +37,7 @@ from DXEntity import DXCC, DXCCRecord
 from .adapters import install_adapters
 from .config import Config, ConfigError
 
-__version__ = "0.1.5"
+__version__ = "0.1.6"
 
 
 CLUSTER_STATS_HOURS = 96  # Number of hours for spots stats
@@ -500,6 +500,11 @@ class ReString(str):
       return NotImplemented
     return bool(re.match(str(pattern), self))
 
+  def __contains__(self, pattern: object) -> bool:
+    if isinstance(pattern, ReString):
+      return NotImplemented
+    return bool(re.search(str(pattern), self))
+
 
 class Cluster(Thread):
   # pylint: disable=too-many-instance-attributes, too-many-positional-arguments
@@ -550,6 +555,7 @@ class Cluster(Thread):
         pass
 
   def run(self) -> None:
+    # pylint: disable=too-many-branches
     LOG.info("Server: %s:%d", self.host, self.port)
     try:
       with Telnet(self.host, self.port, timeout=self.timeout) as telnet:
@@ -575,6 +581,12 @@ class Cluster(Thread):
             self.process_message(line)
           elif line == r'^WCY de':
             self.process_wcy(line)
+          elif line == r'WX de':
+            pass  # Don't process cluster local weather
+          elif line == rf'{self.call}.* de ':
+            pass  # Prompt line
+          elif r'(\w+ enabled for|[Ss]pots enabled)' in line:
+            LOG.debug('Ignored line: %s', line)
           else:
             LOG.warning('Unprocessed line: %s', line)
     except (EOFError, OSError, TimeoutError, UnboundLocalError) as err:
@@ -682,6 +694,7 @@ def make_queue(config):
 
 class SigHandler:
   def __init__(self):
+    LOG.info('Installing signal handlers')
     self.log_levels = cycle([logging.DEBUG, logging.INFO])
     for sig in SIGNALS:
       signal.signal(sig, self.handler)
@@ -742,7 +755,6 @@ class SigHandler:
 
 
 def main():
-  # pylint: disable=too-many-statements
   try:
     config = Config()
   except ConfigError as err:
@@ -762,7 +774,6 @@ def main():
   s_thread.daemon = True
   s_thread.start()
 
-  LOG.info('Installing signal handlers')
   SigHandler()
 
   # Monitor the running threads.
