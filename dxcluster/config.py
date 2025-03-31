@@ -7,7 +7,9 @@
 #
 #
 
+import csv
 import logging
+import math
 import os
 from pathlib import Path
 
@@ -58,15 +60,18 @@ class Config:
   def read_servers(server_file):
     server_list = []
     with server_file.open('r', encoding="utf-8") as fds:
-      for line in (ln.strip() for ln in fds if not ln.startswith('#')):
-        fields = [f.strip() for f in line.split(',')]
+      lines = (fl for fl in fds if not fl.startswith('#'))
+      csv_reader = csv.reader(lines, skipinitialspace=True, quoting=csv.QUOTE_MINIMAL)
+      for fields in csv_reader:
         if len(fields) != 4:
-          LOG.warning('Incorrect number of fields: %s', line)
+          LOG.warning('Incorrect number of fields: %s', fields)
           continue
         try:
-          server_list.append([fields[0], fields[1], int(fields[2])])
+          weight = 1 + int(math.log10(int(fields[3])))
+          for _ in range(weight):
+            server_list.append([fields[0], fields[1], int(fields[2])])
         except ValueError:
-          LOG.warning('Server entry error: %s', line)
+          LOG.warning('Server entry error: %s', fields)
 
     return server_list
 

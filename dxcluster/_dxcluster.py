@@ -37,7 +37,7 @@ from DXEntity import DXCC, DXCCRecord
 from .adapters import install_adapters
 from .config import Config, ConfigError
 
-__version__ = "0.1.6"
+__version__ = "0.1.7"
 
 
 CLUSTER_STATS_HOURS = 96  # Number of hours for spots stats
