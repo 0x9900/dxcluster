@@ -27,7 +27,11 @@ class ConfigError(Exception):
 
 
 class Config:
-  DIRS = ['.', '~/.local']
+  DIRS = [
+    Path('.'),
+    Path.cwd(),
+    Path('/opt/dxcluster'),
+  ]
   _instance = None
   config_data = None
 
